@@ -184,7 +184,7 @@ func (r *REST) Create(ctx context.Context, obj runtime.Object, createValidation 
 	}()
 	if err != nil {
 		klog.Infof("[metaserver/reststorage] failed to create (%v)", metaserver.KeyFunc(obj))
-		return nil, errors.NewInternalError(err)
+		return nil, err
 	}
 	klog.Infof("[metaserver/reststorage] successfully create (%v)", metaserver.KeyFunc(obj))
 	return obj, nil

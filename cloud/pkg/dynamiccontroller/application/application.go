@@ -89,6 +89,7 @@ type Application struct {
 	Nodename    string
 	Status      applicationStatus
 	Reason      string // why in this status
+	Error       error
 	Option      []byte //
 	ReqBody     []byte // better a k8s api instance
 	RespBody    []byte
@@ -314,7 +315,7 @@ func (a *Agent) Apply(app *Application) error {
 		app.Reset()
 		go a.doApply(app)
 	case Rejected, Failed:
-		return errors.New(app.Reason)
+		return app.Error
 	case Approved:
 		return nil
 	case InApplying:
@@ -424,11 +425,11 @@ func (c *Center) Process(msg model.Message) {
 
 	resp, err := c.ProcessApplication(app)
 	if err != nil {
-		c.Response(app, msg.GetID(), Rejected, err.Error(), nil)
+		c.Response(app, msg.GetID(), Rejected, err.Error(), err, nil)
 		klog.Errorf("[metaserver/applicationCenter]failed to process Application(%+v), %v", app, err)
 		return
 	}
-	c.Response(app, msg.GetID(), Approved, "", resp)
+	c.Response(app, msg.GetID(), Approved, "", nil, resp)
 	klog.Infof("[metaserver/applicationCenter]successfully to process Application(%+v)", app)
 }
 
@@ -550,8 +551,8 @@ func (c *Center) ProcessApplication(app *Application) (interface{}, error) {
 }
 
 // Response update application, generate and send resp message to edge
-func (c *Center) Response(app *Application, parentID string, status applicationStatus, reason string, respContent interface{}) {
-	app.Status, app.Reason = status, reason
+func (c *Center) Response(app *Application, parentID string, status applicationStatus, reason string, err error, respContent interface{}) {
+	app.Status, app.Reason, app.Error = status, reason, err
 	if respContent != nil {
 		app.RespBody = toBytes(respContent)
 	}
