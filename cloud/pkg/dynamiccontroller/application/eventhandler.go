@@ -18,6 +18,7 @@ package application
 
 import (
 	"fmt"
+	"sync"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -82,6 +83,7 @@ func (c *handlerCenter) DeleteListener(s *SelectorListener) {
 type CommonResourceEventHandler struct {
 	events chan watch.Event
 	//TODO: num of listeners is proportional to the number of request, need reduce.
+	mu           sync.RWMutex
 	listeners    map[string]*SelectorListener
 	messageLayer messagelayer.MessageLayer
 	gvr          schema.GroupVersionResource
@@ -144,20 +146,26 @@ func (c *CommonResourceEventHandler) AddListener(s *SelectorListener) error {
 		return fmt.Errorf("failed to list: %v", err)
 	}
 	s.sendAllObjects(ret, c.messageLayer)
+	c.mu.Lock()
 	c.listeners[s.id] = s
+	c.mu.Unlock()
 	return nil
 }
 
 func (c *CommonResourceEventHandler) DeleteListener(s *SelectorListener) {
+	c.mu.Lock()
 	delete(c.listeners, s.id)
+	c.mu.Unlock()
 }
 
 func (c *CommonResourceEventHandler) dispatchEvents() {
 	for event := range c.events {
 		klog.V(4).Infof("[metaserver/resourceEventHandler] handler(%v), send obj event{%v/%v} to listeners", c.gvr, event.Type, event.Object.GetObjectKind().GroupVersionKind().String())
+		c.mu.Lock()
 		for _, listener := range c.listeners {
 			listener.sendObj(event, c.messageLayer)
 		}
+		c.mu.Unlock()
 	}
 	klog.Warningf("[metaserver/resourceEventHandler] handler(%v) stopped!", c.gvr.String())
 }
