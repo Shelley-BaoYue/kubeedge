@@ -38,6 +38,8 @@ import (
 	"github.com/kubeedge/beehive/pkg/core"
 	"github.com/kubeedge/kubeedge/edge/pkg/common/modules"
 	edgedconfig "github.com/kubeedge/kubeedge/edge/pkg/edged/config"
+	fakekube "github.com/kubeedge/kubeedge/edge/pkg/edged/fake"
+	metaclient "github.com/kubeedge/kubeedge/edge/pkg/metamanager/client"
 	"github.com/kubeedge/kubeedge/pkg/apis/componentconfig/edgecore/v1alpha1"
 )
 
@@ -102,6 +104,7 @@ func newEdged(enable bool) (*edged, error) {
 		klog.ErrorS(err, "Failed to construct kubelet dependencies")
 		return nil, fmt.Errorf("failed to construct kubelet dependencies")
 	}
+	kubeletDeps.KubeClient = fakekube.NewSimpleClientset(metaclient.New())
 
 	ed = &edged{
 		context:     context.Background(),
