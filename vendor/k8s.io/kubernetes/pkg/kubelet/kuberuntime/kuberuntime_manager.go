@@ -48,7 +48,6 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/images"
 	"k8s.io/kubernetes/pkg/kubelet/lifecycle"
 	"k8s.io/kubernetes/pkg/kubelet/logs"
-	"k8s.io/kubernetes/pkg/kubelet/metrics"
 	proberesults "k8s.io/kubernetes/pkg/kubelet/prober/results"
 	"k8s.io/kubernetes/pkg/kubelet/runtimeclass"
 	"k8s.io/kubernetes/pkg/kubelet/types"
@@ -75,12 +74,10 @@ var (
 	ErrVersionNotSupported = errors.New("runtime api version is not supported")
 )
 
-// podStateProvider can determine if none of the elements are necessary to retain (pod content)
-// or if none of the runtime elements are necessary to retain (containers)
+// podStateProvider can determine if a pod is deleted ir terminated
 type podStateProvider interface {
-	IsPodTerminationRequested(kubetypes.UID) bool
-	ShouldPodContentBeRemoved(kubetypes.UID) bool
-	ShouldPodRuntimeBeRemoved(kubetypes.UID) bool
+	IsPodDeleted(kubetypes.UID) bool
+	IsPodTerminated(kubetypes.UID) bool
 }
 
 type kubeGenericRuntimeManager struct {
@@ -144,18 +141,6 @@ type kubeGenericRuntimeManager struct {
 
 	// PodState provider instance
 	podStateProvider podStateProvider
-
-	// Use RuntimeDefault as the default seccomp profile for all workloads.
-	seccompDefault bool
-
-	// MemorySwapBehavior defines how swap is used
-	memorySwapBehavior string
-
-	//Function to get node allocatable resources
-	getNodeAllocatable func() v1.ResourceList
-
-	// Memory throttling factor for MemoryQoS
-	memoryThrottlingFactor float64
 }
 
 // KubeGenericRuntime is a interface contains interfaces for container runtime and command.
@@ -167,7 +152,7 @@ type KubeGenericRuntime interface {
 
 // LegacyLogProvider gives the ability to use unsupported docker log drivers (e.g. journald)
 type LegacyLogProvider interface {
-	// GetContainerLogTail gets the last few lines of the logs for a specific container.
+	// Get the last few lines of the logs for a specific container.
 	GetContainerLogTail(uid kubetypes.UID, name, namespace string, containerID kubecontainer.ContainerID) (string, error)
 }
 
@@ -197,33 +182,25 @@ func NewKubeGenericRuntimeManager(
 	legacyLogProvider LegacyLogProvider,
 	logManager logs.ContainerLogManager,
 	runtimeClassManager *runtimeclass.Manager,
-	seccompDefault bool,
-	memorySwapBehavior string,
-	getNodeAllocatable func() v1.ResourceList,
-	memoryThrottlingFactor float64,
 ) (KubeGenericRuntime, error) {
 	kubeRuntimeManager := &kubeGenericRuntimeManager{
-		recorder:               recorder,
-		cpuCFSQuota:            cpuCFSQuota,
-		cpuCFSQuotaPeriod:      cpuCFSQuotaPeriod,
-		seccompProfileRoot:     seccompProfileRoot,
-		livenessManager:        livenessManager,
-		readinessManager:       readinessManager,
-		startupManager:         startupManager,
-		machineInfo:            machineInfo,
-		osInterface:            osInterface,
-		runtimeHelper:          runtimeHelper,
-		runtimeService:         newInstrumentedRuntimeService(runtimeService),
-		imageService:           newInstrumentedImageManagerService(imageService),
-		internalLifecycle:      internalLifecycle,
-		legacyLogProvider:      legacyLogProvider,
-		logManager:             logManager,
-		runtimeClassManager:    runtimeClassManager,
-		logReduction:           logreduction.NewLogReduction(identicalErrorDelay),
-		seccompDefault:         seccompDefault,
-		memorySwapBehavior:     memorySwapBehavior,
-		getNodeAllocatable:     getNodeAllocatable,
-		memoryThrottlingFactor: memoryThrottlingFactor,
+		recorder:            recorder,
+		cpuCFSQuota:         cpuCFSQuota,
+		cpuCFSQuotaPeriod:   cpuCFSQuotaPeriod,
+		seccompProfileRoot:  seccompProfileRoot,
+		livenessManager:     livenessManager,
+		readinessManager:    readinessManager,
+		startupManager:      startupManager,
+		machineInfo:         machineInfo,
+		osInterface:         osInterface,
+		runtimeHelper:       runtimeHelper,
+		runtimeService:      newInstrumentedRuntimeService(runtimeService),
+		imageService:        newInstrumentedImageManagerService(imageService),
+		internalLifecycle:   internalLifecycle,
+		legacyLogProvider:   legacyLogProvider,
+		logManager:          logManager,
+		runtimeClassManager: runtimeClassManager,
+		logReduction:        logreduction.NewLogReduction(identicalErrorDelay),
 	}
 
 	typedVersion, err := kubeRuntimeManager.getTypedVersion()
@@ -797,7 +774,6 @@ func (m *kubeGenericRuntimeManager) SyncPod(pod *v1.Pod, podStatus *kubecontaine
 		var err error
 
 		klog.V(4).InfoS("Creating PodSandbox for pod", "pod", klog.KObj(pod))
-		metrics.StartedPodsTotal.Inc()
 		createSandboxResult := kubecontainer.NewSyncResult(kubecontainer.CreatePodSandbox, format.Pod(pod))
 		result.AddSyncResult(createSandboxResult)
 		podSandboxID, msg, err = m.createPodSandbox(pod, podContainerChanges.Attempt)
@@ -806,14 +782,10 @@ func (m *kubeGenericRuntimeManager) SyncPod(pod *v1.Pod, podStatus *kubecontaine
 			// or CRI if the Pod has been deleted while the POD is
 			// being created. If the pod has been deleted then it's
 			// not a real error.
-			//
-			// SyncPod can still be running when we get here, which
-			// means the PodWorker has not acked the deletion.
-			if m.podStateProvider.IsPodTerminationRequested(pod.UID) {
+			if m.podStateProvider.IsPodDeleted(pod.UID) {
 				klog.V(4).InfoS("Pod was deleted and sandbox failed to be created", "pod", klog.KObj(pod), "podUID", pod.UID)
 				return
 			}
-			metrics.StartedPodsErrorsTotal.Inc()
 			createSandboxResult.Fail(kubecontainer.ErrCreatePodSandbox, msg)
 			klog.ErrorS(err, "CreatePodSandbox for pod failed", "pod", klog.KObj(pod))
 			ref, referr := ref.GetReference(legacyscheme.Scheme, pod)
@@ -866,11 +838,9 @@ func (m *kubeGenericRuntimeManager) SyncPod(pod *v1.Pod, podStatus *kubecontaine
 	}
 
 	// Helper containing boilerplate common to starting all types of containers.
-	// typeName is a description used to describe this type of container in log messages,
+	// typeName is a label used to describe this type of container in log messages,
 	// currently: "container", "init container" or "ephemeral container"
-	// metricLabel is the label used to describe this type of container in monitoring metrics.
-	// currently: "container", "init_container" or "ephemeral_container"
-	start := func(typeName, metricLabel string, spec *startSpec) error {
+	start := func(typeName string, spec *startSpec) error {
 		startContainerResult := kubecontainer.NewSyncResult(kubecontainer.StartContainer, spec.container.Name)
 		result.AddSyncResult(startContainerResult)
 
@@ -881,13 +851,9 @@ func (m *kubeGenericRuntimeManager) SyncPod(pod *v1.Pod, podStatus *kubecontaine
 			return err
 		}
 
-		metrics.StartedContainersTotal.WithLabelValues(metricLabel).Inc()
 		klog.V(4).InfoS("Creating container in pod", "containerType", typeName, "container", spec.container, "pod", klog.KObj(pod))
 		// NOTE (aramase) podIPs are populated for single stack and dual stack clusters. Send only podIPs.
 		if msg, err := m.startContainer(podSandboxID, podSandboxConfig, spec, pod, podStatus, pullSecrets, podIP, podIPs); err != nil {
-			// startContainer() returns well-defined error codes that have reasonable cardinality for metrics and are
-			// useful to cluster administrators to distinguish "server errors" from "user errors".
-			metrics.StartedContainersErrorsTotal.WithLabelValues(metricLabel, err.Error()).Inc()
 			startContainerResult.Fail(err, msg)
 			// known errors that are logged in other places are logged at higher levels here to avoid
 			// repetitive log spam
@@ -909,14 +875,14 @@ func (m *kubeGenericRuntimeManager) SyncPod(pod *v1.Pod, podStatus *kubecontaine
 	// containers cannot be specified on pod creation.
 	if utilfeature.DefaultFeatureGate.Enabled(features.EphemeralContainers) {
 		for _, idx := range podContainerChanges.EphemeralContainersToStart {
-			start("ephemeral container", metrics.EphemeralContainer, ephemeralContainerStartSpec(&pod.Spec.EphemeralContainers[idx]))
+			start("ephemeral container", ephemeralContainerStartSpec(&pod.Spec.EphemeralContainers[idx]))
 		}
 	}
 
 	// Step 6: start the init container.
 	if container := podContainerChanges.NextInitContainerToStart; container != nil {
 		// Start the next init container.
-		if err := start("init container", metrics.InitContainer, containerStartSpec(container)); err != nil {
+		if err := start("init container", containerStartSpec(container)); err != nil {
 			return
 		}
 
@@ -926,7 +892,7 @@ func (m *kubeGenericRuntimeManager) SyncPod(pod *v1.Pod, podStatus *kubecontaine
 
 	// Step 7: start containers in podContainerChanges.ContainersToStart.
 	for _, idx := range podContainerChanges.ContainersToStart {
-		start("container", metrics.Container, containerStartSpec(&pod.Spec.Containers[idx]))
+		start("container", containerStartSpec(&pod.Spec.Containers[idx]))
 	}
 
 	return

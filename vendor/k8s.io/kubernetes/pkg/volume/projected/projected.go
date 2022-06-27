@@ -248,12 +248,12 @@ func (s *projectedVolumeMounter) SetUpAt(dir string, mounterArgs volume.MounterA
 
 func (s *projectedVolumeMounter) collectData(mounterArgs volume.MounterArgs) (map[string]volumeutil.FileProjection, error) {
 	if s.source.DefaultMode == nil {
-		return nil, fmt.Errorf("no defaultMode used, not even the default value for it")
+		return nil, fmt.Errorf("No defaultMode used, not even the default value for it")
 	}
 
 	kubeClient := s.plugin.host.GetKubeClient()
 	if kubeClient == nil {
-		return nil, fmt.Errorf("cannot setup projected volume %v because kube client is not configured", s.volName)
+		return nil, fmt.Errorf("Cannot setup projected volume %v because kube client is not configured", s.volName)
 	}
 
 	errlist := []error{}
@@ -334,6 +334,9 @@ func (s *projectedVolumeMounter) collectData(mounterArgs volume.MounterArgs) (ma
 				auds = []string{tp.Audience}
 			}
 			tr, err := s.plugin.getServiceAccountToken(s.pod.Namespace, s.pod.Spec.ServiceAccountName, &authenticationv1.TokenRequest{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: s.pod.Spec.ServiceAccountName,
+				},
 				Spec: authenticationv1.TokenRequestSpec{
 					Audiences:         auds,
 					ExpirationSeconds: tp.ExpirationSeconds,

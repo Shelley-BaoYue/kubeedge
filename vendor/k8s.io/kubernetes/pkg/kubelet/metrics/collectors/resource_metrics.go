@@ -74,13 +74,6 @@ var (
 		nil,
 		metrics.ALPHA,
 		"")
-
-	containerStartTimeDesc = metrics.NewDesc("container_start_time_seconds",
-		"Start time of the container since unix epoch in seconds",
-		[]string{"container", "pod", "namespace"},
-		nil,
-		metrics.ALPHA,
-		"")
 )
 
 // NewResourceMetricsCollector returns a metrics.StableCollector which exports resource metrics
@@ -103,7 +96,6 @@ var _ metrics.StableCollector = &resourceMetricsCollector{}
 func (rc *resourceMetricsCollector) DescribeWithStability(ch chan<- *metrics.Desc) {
 	ch <- nodeCPUUsageDesc
 	ch <- nodeMemoryUsageDesc
-	ch <- containerStartTimeDesc
 	ch <- containerCPUUsageDesc
 	ch <- containerMemoryUsageDesc
 	ch <- podCPUUsageDesc
@@ -132,7 +124,6 @@ func (rc *resourceMetricsCollector) CollectWithStability(ch chan<- metrics.Metri
 
 	for _, pod := range statsSummary.Pods {
 		for _, container := range pod.Containers {
-			rc.collectContainerStartTime(ch, pod, container)
 			rc.collectContainerCPUMetrics(ch, pod, container)
 			rc.collectContainerMemoryMetrics(ch, pod, container)
 		}
@@ -157,15 +148,6 @@ func (rc *resourceMetricsCollector) collectNodeMemoryMetrics(ch chan<- metrics.M
 
 	ch <- metrics.NewLazyMetricWithTimestamp(s.Memory.Time.Time,
 		metrics.NewLazyConstMetric(nodeMemoryUsageDesc, metrics.GaugeValue, float64(*s.Memory.WorkingSetBytes)))
-}
-
-func (rc *resourceMetricsCollector) collectContainerStartTime(ch chan<- metrics.Metric, pod summary.PodStats, s summary.ContainerStats) {
-	if s.StartTime.Unix() == 0 {
-		return
-	}
-
-	ch <- metrics.NewLazyMetricWithTimestamp(s.StartTime.Time,
-		metrics.NewLazyConstMetric(containerStartTimeDesc, metrics.GaugeValue, float64(s.StartTime.UnixNano())/float64(time.Second), s.Name, pod.PodRef.Name, pod.PodRef.Namespace))
 }
 
 func (rc *resourceMetricsCollector) collectContainerCPUMetrics(ch chan<- metrics.Metric, pod summary.PodStats, s summary.ContainerStats) {

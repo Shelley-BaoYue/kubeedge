@@ -25,15 +25,24 @@ func (p *ImageTagTransformerPlugin) Config(
 }
 
 func (p *ImageTagTransformerPlugin) Transform(m resmap.ResMap) error {
-	if err := m.ApplyFilter(imagetag.LegacyFilter{
-		ImageTag: p.ImageTag,
-	}); err != nil {
-		return err
+	for _, r := range m.Resources() {
+		// traverse all fields at first
+		err := r.ApplyFilter(imagetag.LegacyFilter{
+			ImageTag: p.ImageTag,
+		})
+		if err != nil {
+			return err
+		}
+		// then use user specified field specs
+		err = r.ApplyFilter(imagetag.Filter{
+			ImageTag: p.ImageTag,
+			FsSlice:  p.FieldSpecs,
+		})
+		if err != nil {
+			return err
+		}
 	}
-	return m.ApplyFilter(imagetag.Filter{
-		ImageTag: p.ImageTag,
-		FsSlice:  p.FieldSpecs,
-	})
+	return nil
 }
 
 func NewImageTagTransformerPlugin() resmap.TransformerPlugin {

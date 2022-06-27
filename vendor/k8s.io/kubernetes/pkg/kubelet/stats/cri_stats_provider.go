@@ -67,9 +67,8 @@ type criStatsProvider struct {
 	hostStatsProvider HostStatsProvider
 
 	// cpuUsageCache caches the cpu usage for containers.
-	cpuUsageCache                  map[string]*cpuUsageRecord
-	mutex                          sync.RWMutex
-	disableAcceleratorUsageMetrics bool
+	cpuUsageCache map[string]*cpuUsageRecord
+	mutex         sync.RWMutex
 }
 
 // newCRIStatsProvider returns a containerStatsProvider implementation that
@@ -80,16 +79,14 @@ func newCRIStatsProvider(
 	runtimeService internalapi.RuntimeService,
 	imageService internalapi.ImageManagerService,
 	hostStatsProvider HostStatsProvider,
-	disableAcceleratorUsageMetrics bool,
 ) containerStatsProvider {
 	return &criStatsProvider{
-		cadvisor:                       cadvisor,
-		resourceAnalyzer:               resourceAnalyzer,
-		runtimeService:                 runtimeService,
-		imageService:                   imageService,
-		hostStatsProvider:              hostStatsProvider,
-		cpuUsageCache:                  make(map[string]*cpuUsageRecord),
-		disableAcceleratorUsageMetrics: disableAcceleratorUsageMetrics,
+		cadvisor:          cadvisor,
+		resourceAnalyzer:  resourceAnalyzer,
+		runtimeService:    runtimeService,
+		imageService:      imageService,
+		hostStatsProvider: hostStatsProvider,
+		cpuUsageCache:     make(map[string]*cpuUsageRecord),
 	}
 }
 
@@ -787,11 +784,8 @@ func (p *criStatsProvider) addCadvisorContainerStats(
 	if memory != nil {
 		cs.Memory = memory
 	}
-
-	if !p.disableAcceleratorUsageMetrics {
-		accelerators := cadvisorInfoToAcceleratorStats(caPodStats)
-		cs.Accelerators = accelerators
-	}
+	accelerators := cadvisorInfoToAcceleratorStats(caPodStats)
+	cs.Accelerators = accelerators
 }
 
 func (p *criStatsProvider) addCadvisorContainerCPUAndMemoryStats(

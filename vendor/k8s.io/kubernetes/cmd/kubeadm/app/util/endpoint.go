@@ -22,12 +22,11 @@ import (
 	"net/url"
 	"strconv"
 
-	kubeadmapi "k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm"
+	"github.com/pkg/errors"
 
 	"k8s.io/apimachinery/pkg/util/validation"
+	kubeadmapi "k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm"
 	utilsnet "k8s.io/utils/net"
-
-	"github.com/pkg/errors"
 )
 
 // GetControlPlaneEndpoint returns a properly formatted endpoint for the control plane built according following rules:

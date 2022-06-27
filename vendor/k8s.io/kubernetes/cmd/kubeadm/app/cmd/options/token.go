@@ -20,19 +20,17 @@ import (
 	"fmt"
 	"strings"
 
-	bootstraptokenv1 "k8s.io/kubernetes/cmd/kubeadm/app/apis/bootstraptoken/v1"
-	kubeadmapiv1 "k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm/v1beta3"
-	kubeadmconstants "k8s.io/kubernetes/cmd/kubeadm/app/constants"
+	"github.com/spf13/pflag"
 
 	bootstrapapi "k8s.io/cluster-bootstrap/token/api"
-
-	"github.com/spf13/pflag"
+	kubeadmapiv1beta2 "k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm/v1beta2"
+	kubeadmconstants "k8s.io/kubernetes/cmd/kubeadm/app/constants"
 )
 
 // NewBootstrapTokenOptions creates a new BootstrapTokenOptions object with the default values
 func NewBootstrapTokenOptions() *BootstrapTokenOptions {
-	bto := &BootstrapTokenOptions{&bootstraptokenv1.BootstrapToken{}, ""}
-	kubeadmapiv1.SetDefaults_BootstrapToken(bto.BootstrapToken)
+	bto := &BootstrapTokenOptions{&kubeadmapiv1beta2.BootstrapToken{}, ""}
+	kubeadmapiv1beta2.SetDefaults_BootstrapToken(bto.BootstrapToken)
 	return bto
 }
 
@@ -40,7 +38,7 @@ func NewBootstrapTokenOptions() *BootstrapTokenOptions {
 // and applying the parsed flags to a InitConfiguration object later at runtime
 // TODO: In the future, we might want to group the flags in a better way than adding them all individually like this
 type BootstrapTokenOptions struct {
-	*bootstraptokenv1.BootstrapToken
+	*kubeadmapiv1beta2.BootstrapToken
 	TokenStr string `datapolicy:"token"`
 }
 
@@ -91,16 +89,16 @@ func (bto *BootstrapTokenOptions) AddDescriptionFlag(fs *pflag.FlagSet) {
 
 // ApplyTo applies the values set internally in the BootstrapTokenOptions object to a InitConfiguration object at runtime
 // If --token was specified in the CLI (as a string), it's parsed and validated before it's added to the BootstrapToken object.
-func (bto *BootstrapTokenOptions) ApplyTo(cfg *kubeadmapiv1.InitConfiguration) error {
+func (bto *BootstrapTokenOptions) ApplyTo(cfg *kubeadmapiv1beta2.InitConfiguration) error {
 	if len(bto.TokenStr) > 0 {
 		var err error
-		bto.Token, err = bootstraptokenv1.NewBootstrapTokenString(bto.TokenStr)
+		bto.Token, err = kubeadmapiv1beta2.NewBootstrapTokenString(bto.TokenStr)
 		if err != nil {
 			return err
 		}
 	}
 
 	// Set the token specified by the flags as the first and only token to create in case --config is not specified
-	cfg.BootstrapTokens = []bootstraptokenv1.BootstrapToken{*bto.BootstrapToken}
+	cfg.BootstrapTokens = []kubeadmapiv1beta2.BootstrapToken{*bto.BootstrapToken}
 	return nil
 }

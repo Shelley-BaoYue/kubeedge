@@ -17,6 +17,7 @@ limitations under the License.
 package agent
 
 import (
+	"fmt"
 	"math"
 	"sync"
 	"time"
@@ -37,7 +38,7 @@ type ClientSet struct {
 	address     string // proxy server address. Assuming HA proxy server
 	serverCount int    // number of proxy server instances, should be 1
 	// unless it is an HA server. Initialized when the ClientSet creates
-	// the first client. When syncForever is set, it will be the most recently seen.
+	// the first client.
 	syncInterval time.Duration // The interval by which the agent
 	// periodically checks that it has connections to all instances of the
 	// proxy server.
@@ -54,10 +55,6 @@ type ClientSet struct {
 
 	agentIdentifiers string // The identifiers of the agent, which will be used
 	// by the server when choosing agent
-
-	warnOnChannelLimit bool
-
-	syncForever bool // Continue syncing (support dynamic server count).
 }
 
 func (cs *ClientSet) ClientsCount() int {
@@ -90,17 +87,9 @@ func (cs *ClientSet) HasID(serverID string) bool {
 	return cs.hasIDLocked(serverID)
 }
 
-type DuplicateServerError struct {
-	ServerID string
-}
-
-func (dse *DuplicateServerError) Error() string {
-	return "duplicate server: " + dse.ServerID
-}
-
 func (cs *ClientSet) addClientLocked(serverID string, c *Client) error {
 	if cs.hasIDLocked(serverID) {
-		return &DuplicateServerError{ServerID: serverID}
+		return fmt.Errorf("client for proxy server %s already exists", serverID)
 	}
 	cs.clients[serverID] = c
 	return nil
@@ -132,8 +121,6 @@ type ClientSetConfig struct {
 	SyncIntervalCap         time.Duration
 	DialOptions             []grpc.DialOption
 	ServiceAccountTokenPath string
-	WarnOnChannelLimit      bool
-	SyncForever             bool
 }
 
 func (cc *ClientSetConfig) NewAgentClientSet(stopCh <-chan struct{}) *ClientSet {
@@ -147,8 +134,6 @@ func (cc *ClientSetConfig) NewAgentClientSet(stopCh <-chan struct{}) *ClientSet 
 		syncIntervalCap:         cc.SyncIntervalCap,
 		dialOptions:             cc.DialOptions,
 		serviceAccountTokenPath: cc.ServiceAccountTokenPath,
-		warnOnChannelLimit:      cc.WarnOnChannelLimit,
-		syncForever:             cc.SyncForever,
 		stopCh:                  stopCh,
 	}
 }
@@ -173,16 +158,9 @@ func (cs *ClientSet) sync() {
 	backoff := cs.resetBackoff()
 	var duration time.Duration
 	for {
-		if err := cs.connectOnce(); err != nil {
-			if dse, ok := err.(*DuplicateServerError); ok {
-				klog.V(4).InfoS("duplicate server", "serverID", dse.ServerID, "serverCount", cs.serverCount, "clientsCount", cs.ClientsCount())
-				if cs.serverCount != 0 && cs.ClientsCount() >= cs.serverCount {
-					duration = backoff.Step()
-				}
-			} else {
-				klog.ErrorS(err, "cannot connect once")
-				duration = backoff.Step()
-			}
+		if err := cs.syncOnce(); err != nil {
+			klog.ErrorS(err, "cannot sync once")
+			duration = backoff.Step()
 		} else {
 			backoff = cs.resetBackoff()
 			duration = wait.Jitter(backoff.Duration, backoff.Jitter)
@@ -196,8 +174,8 @@ func (cs *ClientSet) sync() {
 	}
 }
 
-func (cs *ClientSet) connectOnce() error {
-	if !cs.syncForever && cs.serverCount != 0 && cs.ClientsCount() >= cs.serverCount {
+func (cs *ClientSet) syncOnce() error {
+	if cs.serverCount != 0 && cs.ClientsCount() >= cs.serverCount {
 		return nil
 	}
 	c, serverCount, err := cs.newAgentClient()
@@ -211,13 +189,9 @@ func (cs *ClientSet) connectOnce() error {
 	}
 	cs.serverCount = serverCount
 	if err := cs.AddClient(c.serverID, c); err != nil {
-		if dse, ok := err.(*DuplicateServerError); ok {
-			klog.V(4).InfoS("closing connection to duplicate server", "serverID", dse.ServerID)
-		} else {
-			klog.ErrorS(err, "closing connection failure when adding a client")
-		}
+		klog.ErrorS(err, "closing connection failure when adding a client")
 		c.Close()
-		return err
+		return nil
 	}
 	klog.V(2).InfoS("sync added client connecting to proxy server", "serverID", c.serverID)
 	go c.Serve()

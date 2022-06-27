@@ -42,10 +42,9 @@ func NewCRIStatsProvider(
 	runtimeService internalapi.RuntimeService,
 	imageService internalapi.ImageManagerService,
 	hostStatsProvider HostStatsProvider,
-	disableAcceleratorUsageMetrics bool,
 ) *Provider {
 	return newStatsProvider(cadvisor, podManager, runtimeCache, newCRIStatsProvider(cadvisor, resourceAnalyzer,
-		runtimeService, imageService, hostStatsProvider, disableAcceleratorUsageMetrics))
+		runtimeService, imageService, hostStatsProvider))
 }
 
 // NewCadvisorStatsProvider returns a containerStatsProvider that provides both
@@ -145,7 +144,7 @@ func (p *Provider) RootFsStats() (*statsapi.FsStats, error) {
 	}
 
 	// Get the root container stats's timestamp, which will be used as the
-	// imageFs stats timestamp.  Don't force a stats update, as we only want the timestamp.
+	// imageFs stats timestamp.  Dont force a stats update, as we only want the timestamp.
 	rootStats, err := getCgroupStats(p.cadvisor, "/", false)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get root container stats: %v", err)

@@ -208,23 +208,7 @@ func printTable(table *metav1.Table, output io.Writer, options PrintOptions) err
 				fmt.Fprint(output, "\t")
 			}
 			if cell != nil {
-				switch val := cell.(type) {
-				case string:
-					print := val
-					truncated := false
-					// truncate at newlines
-					newline := strings.Index(print, "\n")
-					if newline >= 0 {
-						truncated = true
-						print = print[:newline]
-					}
-					fmt.Fprint(output, print)
-					if truncated {
-						fmt.Fprint(output, "...")
-					}
-				default:
-					fmt.Fprint(output, val)
-				}
+				fmt.Fprint(output, cell)
 			}
 		}
 		fmt.Fprintln(output)

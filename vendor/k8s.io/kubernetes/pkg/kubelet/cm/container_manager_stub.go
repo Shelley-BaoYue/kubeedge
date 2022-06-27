@@ -36,7 +36,6 @@ import (
 
 type containerManagerStub struct {
 	shouldResetExtendedResourceCapacity bool
-	extendedPluginResources             v1.ResourceList
 }
 
 var _ ContainerManager = &containerManagerStub{}
@@ -88,7 +87,7 @@ func (cm *containerManagerStub) GetPluginRegistrationHandler() cache.PluginHandl
 }
 
 func (cm *containerManagerStub) GetDevicePluginResourceCapacity() (v1.ResourceList, v1.ResourceList, []string) {
-	return cm.extendedPluginResources, cm.extendedPluginResources, []string{}
+	return nil, nil, []string{}
 }
 
 func (cm *containerManagerStub) NewPodContainerManager() PodContainerManager {
@@ -139,29 +138,10 @@ func (cm *containerManagerStub) GetAllocatableCPUs() []int64 {
 	return nil
 }
 
-func (cm *containerManagerStub) GetMemory(_, _ string) []*podresourcesapi.ContainerMemory {
-	return nil
-}
-
-func (cm *containerManagerStub) GetAllocatableMemory() []*podresourcesapi.ContainerMemory {
-	return nil
-}
-
-func (cm *containerManagerStub) GetNodeAllocatableAbsolute() v1.ResourceList {
-	return nil
-}
-
 func NewStubContainerManager() ContainerManager {
 	return &containerManagerStub{shouldResetExtendedResourceCapacity: false}
 }
 
 func NewStubContainerManagerWithExtendedResource(shouldResetExtendedResourceCapacity bool) ContainerManager {
 	return &containerManagerStub{shouldResetExtendedResourceCapacity: shouldResetExtendedResourceCapacity}
-}
-
-func NewStubContainerManagerWithDevicePluginResource(extendedPluginResources v1.ResourceList) ContainerManager {
-	return &containerManagerStub{
-		shouldResetExtendedResourceCapacity: false,
-		extendedPluginResources:             extendedPluginResources,
-	}
 }

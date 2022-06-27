@@ -26,13 +26,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pkg/errors"
+
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/version"
 	"k8s.io/apimachinery/pkg/util/wait"
 	bootstrapapi "k8s.io/cluster-bootstrap/token/api"
+	kubeadmapi "k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm"
 	utilnet "k8s.io/utils/net"
-
-	"github.com/pkg/errors"
 )
 
 const (
@@ -248,6 +249,9 @@ const (
 	// ClusterConfigurationConfigMapKey specifies in what ConfigMap key the cluster configuration should be stored
 	ClusterConfigurationConfigMapKey = "ClusterConfiguration"
 
+	// ClusterStatusConfigMapKey specifies in what ConfigMap key the cluster status should be stored
+	ClusterStatusConfigMapKey = "ClusterStatus"
+
 	// KubeProxyConfigMap specifies in what ConfigMap in the kube-system namespace the kube-proxy configuration should be stored
 	KubeProxyConfigMap = "kube-proxy"
 
@@ -286,7 +290,7 @@ const (
 	MinExternalEtcdVersion = "3.2.18"
 
 	// DefaultEtcdVersion indicates the default etcd version that kubeadm uses
-	DefaultEtcdVersion = "3.5.0-0"
+	DefaultEtcdVersion = "3.4.13-0"
 
 	// Etcd defines variable used internally when referring to etcd component
 	Etcd = "etcd"
@@ -298,6 +302,8 @@ const (
 	KubeScheduler = "kube-scheduler"
 	// KubeProxy defines variable used internally when referring to kube-proxy component
 	KubeProxy = "kube-proxy"
+	// HyperKube defines variable used internally when referring to the hyperkube image
+	HyperKube = "hyperkube"
 	// CoreDNS defines variable used internally when referring to the CoreDNS component
 	CoreDNS = "CoreDNS"
 	// Kubelet defines variable used internally when referring to the Kubelet
@@ -325,7 +331,7 @@ const (
 	CoreDNSImageName = "coredns"
 
 	// CoreDNSVersion is the version of CoreDNS to be deployed if it is used
-	CoreDNSVersion = "v1.8.4"
+	CoreDNSVersion = "v1.8.0"
 
 	// ClusterConfigurationKind is the string kind value for the ClusterConfiguration struct
 	ClusterConfigurationKind = "ClusterConfiguration"
@@ -394,21 +400,7 @@ const (
 	ModeNode string = "Node"
 
 	// PauseVersion indicates the default pause image version for kubeadm
-	PauseVersion = "3.5"
-
-	// CgroupDriverSystemd holds the systemd driver type
-	CgroupDriverSystemd = "systemd"
-
-	// The username of the user that kube-controller-manager runs as.
-	KubeControllerManagerUserName string = "kubeadm-kcm"
-	// The username of the user that kube-apiserver runs as.
-	KubeAPIServerUserName string = "kubeadm-kas"
-	// The username of the user that kube-scheduler runs as.
-	KubeSchedulerUserName string = "kubeadm-ks"
-	// The username of the user that etcd runs as.
-	EtcdUserName string = "kubeadm-etcd"
-	// The group of users that are allowed to read the service account private key.
-	ServiceAccountKeyReadersGroupName string = "kubeadm-sa-key-readers"
+	PauseVersion = "3.4.1"
 )
 
 var (
@@ -448,13 +440,13 @@ var (
 	ControlPlaneComponents = []string{KubeAPIServer, KubeControllerManager, KubeScheduler}
 
 	// MinimumControlPlaneVersion specifies the minimum control plane version kubeadm can deploy
-	MinimumControlPlaneVersion = version.MustParseSemantic("v1.21.0")
+	MinimumControlPlaneVersion = version.MustParseSemantic("v1.20.0")
 
 	// MinimumKubeletVersion specifies the minimum version of kubelet which kubeadm supports
-	MinimumKubeletVersion = version.MustParseSemantic("v1.21.0")
+	MinimumKubeletVersion = version.MustParseSemantic("v1.20.0")
 
 	// CurrentKubernetesVersion specifies current Kubernetes version supported by kubeadm
-	CurrentKubernetesVersion = version.MustParseSemantic("v1.22.0")
+	CurrentKubernetesVersion = version.MustParseSemantic("v1.21.0")
 
 	// SupportedEtcdVersion lists officially supported etcd versions with corresponding Kubernetes releases
 	SupportedEtcdVersion = map[uint8]string{
@@ -467,8 +459,7 @@ var (
 		19: "3.4.13-0",
 		20: "3.4.13-0",
 		21: "3.4.13-0",
-		22: "3.5.0-0",
-		23: "3.5.0-0",
+		22: "3.4.13-0",
 	}
 
 	// KubeadmCertsClusterRoleName sets the name for the ClusterRole that allows
@@ -643,6 +634,14 @@ func GetAPIServerVirtualIP(svcSubnetList string, isDualStack bool) (net.IP, erro
 		return nil, errors.Wrapf(err, "unable to get the first IP address from the given CIDR: %s", svcSubnet.String())
 	}
 	return internalAPIServerVirtualIP, nil
+}
+
+// GetDNSVersion is a handy function that returns the DNS version by DNS type
+func GetDNSVersion(dnsType kubeadmapi.DNSAddOnType) string {
+	if dnsType == kubeadmapi.CoreDNS {
+		return CoreDNSVersion
+	}
+	return ""
 }
 
 // GetKubeletConfigMapName returns the right ConfigMap name for the right branch of k8s

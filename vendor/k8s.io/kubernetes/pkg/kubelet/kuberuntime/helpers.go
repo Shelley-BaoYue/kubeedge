@@ -202,11 +202,8 @@ func toKubeRuntimeStatus(status *runtimeapi.RuntimeStatus) *kubecontainer.Runtim
 	return &kubecontainer.RuntimeStatus{Conditions: conditions}
 }
 
-func fieldProfile(scmp *v1.SeccompProfile, profileRootPath string, fallbackToRuntimeDefault bool) string {
+func fieldProfile(scmp *v1.SeccompProfile, profileRootPath string) string {
 	if scmp == nil {
-		if fallbackToRuntimeDefault {
-			return v1.SeccompProfileRuntimeDefault
-		}
 		return ""
 	}
 	if scmp.Type == v1.SeccompProfileTypeRuntimeDefault {
@@ -218,10 +215,6 @@ func fieldProfile(scmp *v1.SeccompProfile, profileRootPath string, fallbackToRun
 	}
 	if scmp.Type == v1.SeccompProfileTypeUnconfined {
 		return v1.SeccompProfileNameUnconfined
-	}
-
-	if fallbackToRuntimeDefault {
-		return v1.SeccompProfileRuntimeDefault
 	}
 	return ""
 }
@@ -236,10 +229,10 @@ func annotationProfile(profile, profileRootPath string) string {
 }
 
 func (m *kubeGenericRuntimeManager) getSeccompProfilePath(annotations map[string]string, containerName string,
-	podSecContext *v1.PodSecurityContext, containerSecContext *v1.SecurityContext, fallbackToRuntimeDefault bool) string {
+	podSecContext *v1.PodSecurityContext, containerSecContext *v1.SecurityContext) string {
 	// container fields are applied first
 	if containerSecContext != nil && containerSecContext.SeccompProfile != nil {
-		return fieldProfile(containerSecContext.SeccompProfile, m.seccompProfileRoot, fallbackToRuntimeDefault)
+		return fieldProfile(containerSecContext.SeccompProfile, m.seccompProfileRoot)
 	}
 
 	// if container field does not exist, try container annotation (deprecated)
@@ -251,7 +244,7 @@ func (m *kubeGenericRuntimeManager) getSeccompProfilePath(annotations map[string
 
 	// when container seccomp is not defined, try to apply from pod field
 	if podSecContext != nil && podSecContext.SeccompProfile != nil {
-		return fieldProfile(podSecContext.SeccompProfile, m.seccompProfileRoot, fallbackToRuntimeDefault)
+		return fieldProfile(podSecContext.SeccompProfile, m.seccompProfileRoot)
 	}
 
 	// as last resort, try to apply pod annotation (deprecated)
@@ -259,20 +252,13 @@ func (m *kubeGenericRuntimeManager) getSeccompProfilePath(annotations map[string
 		return annotationProfile(profile, m.seccompProfileRoot)
 	}
 
-	if fallbackToRuntimeDefault {
-		return v1.SeccompProfileRuntimeDefault
-	}
-
 	return ""
 }
 
-func fieldSeccompProfile(scmp *v1.SeccompProfile, profileRootPath string, fallbackToRuntimeDefault bool) *runtimeapi.SecurityProfile {
+func fieldSeccompProfile(scmp *v1.SeccompProfile, profileRootPath string) *runtimeapi.SecurityProfile {
+	// TODO: Move to RuntimeDefault as the default instead of Unconfined after discussion
+	// with sig-node.
 	if scmp == nil {
-		if fallbackToRuntimeDefault {
-			return &runtimeapi.SecurityProfile{
-				ProfileType: runtimeapi.SecurityProfile_RuntimeDefault,
-			}
-		}
 		return &runtimeapi.SecurityProfile{
 			ProfileType: runtimeapi.SecurityProfile_Unconfined,
 		}
@@ -295,21 +281,15 @@ func fieldSeccompProfile(scmp *v1.SeccompProfile, profileRootPath string, fallba
 }
 
 func (m *kubeGenericRuntimeManager) getSeccompProfile(annotations map[string]string, containerName string,
-	podSecContext *v1.PodSecurityContext, containerSecContext *v1.SecurityContext, fallbackToRuntimeDefault bool) *runtimeapi.SecurityProfile {
+	podSecContext *v1.PodSecurityContext, containerSecContext *v1.SecurityContext) *runtimeapi.SecurityProfile {
 	// container fields are applied first
 	if containerSecContext != nil && containerSecContext.SeccompProfile != nil {
-		return fieldSeccompProfile(containerSecContext.SeccompProfile, m.seccompProfileRoot, fallbackToRuntimeDefault)
+		return fieldSeccompProfile(containerSecContext.SeccompProfile, m.seccompProfileRoot)
 	}
 
 	// when container seccomp is not defined, try to apply from pod field
 	if podSecContext != nil && podSecContext.SeccompProfile != nil {
-		return fieldSeccompProfile(podSecContext.SeccompProfile, m.seccompProfileRoot, fallbackToRuntimeDefault)
-	}
-
-	if fallbackToRuntimeDefault {
-		return &runtimeapi.SecurityProfile{
-			ProfileType: runtimeapi.SecurityProfile_RuntimeDefault,
-		}
+		return fieldSeccompProfile(podSecContext.SeccompProfile, m.seccompProfileRoot)
 	}
 
 	return &runtimeapi.SecurityProfile{

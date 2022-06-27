@@ -24,12 +24,20 @@ import (
 	"path/filepath"
 	"time"
 
+	"k8s.io/klog/v2"
+
 	runtimeapi "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 )
 
 // ImageFsInfo returns information of the filesystem that is used to store images.
 func (ds *dockerService) ImageFsInfo(_ context.Context, _ *runtimeapi.ImageFsInfoRequest) (*runtimeapi.ImageFsInfoResponse, error) {
-	bytes, inodes, err := dirSize(filepath.Join(ds.dockerRootDir, "image"))
+	info, err := ds.client.Info()
+	if err != nil {
+		klog.ErrorS(err, "Failed to get docker info")
+		return nil, err
+	}
+
+	bytes, inodes, err := dirSize(filepath.Join(info.DockerRootDir, "image"))
 	if err != nil {
 		return nil, err
 	}
@@ -39,7 +47,7 @@ func (ds *dockerService) ImageFsInfo(_ context.Context, _ *runtimeapi.ImageFsInf
 			{
 				Timestamp: time.Now().Unix(),
 				FsId: &runtimeapi.FilesystemIdentifier{
-					Mountpoint: ds.dockerRootDir,
+					Mountpoint: info.DockerRootDir,
 				},
 				UsedBytes: &runtimeapi.UInt64Value{
 					Value: uint64(bytes),

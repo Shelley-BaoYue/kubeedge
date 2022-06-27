@@ -12,7 +12,6 @@ import (
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/keepalive"
 	"k8s.io/klog/v2"
 
 	"sigs.k8s.io/apiserver-network-proxy/cmd/agent/app/options"
@@ -64,14 +63,8 @@ func (a *Agent) runProxyConnection(o *options.GrpcProxyAgentOptions, stopCh <-ch
 	if tlsConfig, err = util.GetClientTLSConfig(o.CaCert, o.AgentCert, o.AgentKey, o.ProxyServerHost, o.AlpnProtos); err != nil {
 		return err
 	}
-	dialOptions := []grpc.DialOption{
-		grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)),
-		grpc.WithKeepaliveParams(keepalive.ClientParameters{
-			Time:                o.KeepaliveTime,
-			PermitWithoutStream: true,
-		}),
-	}
-	cc := o.ClientSetConfig(dialOptions...)
+	dialOption := grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig))
+	cc := o.ClientSetConfig(dialOption)
 	cs := cc.NewAgentClientSet(stopCh)
 	cs.Serve()
 

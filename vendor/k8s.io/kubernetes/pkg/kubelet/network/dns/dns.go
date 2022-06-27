@@ -27,12 +27,9 @@ import (
 
 	"k8s.io/api/core/v1"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
-	utilvalidation "k8s.io/apimachinery/pkg/util/validation"
-	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	"k8s.io/client-go/tools/record"
 	runtimeapi "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 	"k8s.io/kubernetes/pkg/apis/core/validation"
-	"k8s.io/kubernetes/pkg/features"
 	kubecontainer "k8s.io/kubernetes/pkg/kubelet/container"
 	"k8s.io/kubernetes/pkg/kubelet/util/format"
 
@@ -102,37 +99,19 @@ func omitDuplicates(strs []string) []string {
 func (c *Configurer) formDNSSearchFitsLimits(composedSearch []string, pod *v1.Pod) []string {
 	limitsExceeded := false
 
-	maxDNSSearchPaths, maxDNSSearchListChars := validation.MaxDNSSearchPathsLegacy, validation.MaxDNSSearchListCharsLegacy
-	if utilfeature.DefaultFeatureGate.Enabled(features.ExpandedDNSConfig) {
-		maxDNSSearchPaths, maxDNSSearchListChars = validation.MaxDNSSearchPathsExpanded, validation.MaxDNSSearchListCharsExpanded
-	}
-
-	if len(composedSearch) > maxDNSSearchPaths {
-		composedSearch = composedSearch[:maxDNSSearchPaths]
+	if len(composedSearch) > validation.MaxDNSSearchPaths {
+		composedSearch = composedSearch[:validation.MaxDNSSearchPaths]
 		limitsExceeded = true
 	}
 
-	// In some DNS resolvers(e.g. glibc 2.28), DNS resolving causes abort() if there is a
-	// search path exceeding 255 characters. We have to filter them out.
-	l := 0
-	for _, search := range composedSearch {
-		if len(search) > utilvalidation.DNS1123SubdomainMaxLength {
-			limitsExceeded = true
-			continue
-		}
-		composedSearch[l] = search
-		l++
-	}
-	composedSearch = composedSearch[:l]
-
-	if resolvSearchLineStrLen := len(strings.Join(composedSearch, " ")); resolvSearchLineStrLen > maxDNSSearchListChars {
+	if resolvSearchLineStrLen := len(strings.Join(composedSearch, " ")); resolvSearchLineStrLen > validation.MaxDNSSearchListChars {
 		cutDomainsNum := 0
 		cutDomainsLen := 0
 		for i := len(composedSearch) - 1; i >= 0; i-- {
 			cutDomainsLen += len(composedSearch[i]) + 1
 			cutDomainsNum++
 
-			if (resolvSearchLineStrLen - cutDomainsLen) <= maxDNSSearchListChars {
+			if (resolvSearchLineStrLen - cutDomainsLen) <= validation.MaxDNSSearchListChars {
 				break
 			}
 		}
@@ -194,10 +173,7 @@ func (c *Configurer) CheckLimitsForResolvConf() {
 		return
 	}
 
-	domainCountLimit, maxDNSSearchListChars := validation.MaxDNSSearchPathsLegacy, validation.MaxDNSSearchListCharsLegacy
-	if utilfeature.DefaultFeatureGate.Enabled(features.ExpandedDNSConfig) {
-		domainCountLimit, maxDNSSearchListChars = validation.MaxDNSSearchPathsExpanded, validation.MaxDNSSearchListCharsExpanded
-	}
+	domainCountLimit := validation.MaxDNSSearchPaths
 
 	if c.ClusterDomain != "" {
 		domainCountLimit -= 3
@@ -210,17 +186,8 @@ func (c *Configurer) CheckLimitsForResolvConf() {
 		return
 	}
 
-	for _, search := range hostSearch {
-		if len(search) > utilvalidation.DNS1123SubdomainMaxLength {
-			log := fmt.Sprintf("Resolv.conf file %q contains a search path which length is more than allowed %d chars!", c.ResolverConfig, utilvalidation.DNS1123SubdomainMaxLength)
-			c.recorder.Event(c.nodeRef, v1.EventTypeWarning, "CheckLimitsForResolvConf", log)
-			klog.V(4).InfoS("Check limits for resolv.conf failed", "eventlog", log)
-			return
-		}
-	}
-
-	if len(strings.Join(hostSearch, " ")) > maxDNSSearchListChars {
-		log := fmt.Sprintf("Resolv.conf file '%s' contains search line which length is more than allowed %d chars!", c.ResolverConfig, maxDNSSearchListChars)
+	if len(strings.Join(hostSearch, " ")) > validation.MaxDNSSearchListChars {
+		log := fmt.Sprintf("Resolv.conf file '%s' contains search line which length is more than allowed %d chars!", c.ResolverConfig, validation.MaxDNSSearchListChars)
 		c.recorder.Event(c.nodeRef, v1.EventTypeWarning, "CheckLimitsForResolvConf", log)
 		klog.V(4).InfoS("Check limits for resolv.conf failed", "eventlog", log)
 		return

@@ -18,11 +18,9 @@ limitations under the License.
 
 package cm
 
-import "errors"
+import "fmt"
 
 type unsupportedCgroupManager struct{}
-
-var errNotSupported = errors.New("Cgroup Manager is not supported in this build")
 
 // Make sure that unsupportedCgroupManager implements the CgroupManager interface
 var _ CgroupManager = &unsupportedCgroupManager{}
@@ -53,11 +51,11 @@ func (m *unsupportedCgroupManager) Update(_ *CgroupConfig) error {
 }
 
 func (m *unsupportedCgroupManager) Create(_ *CgroupConfig) error {
-	return errNotSupported
+	return fmt.Errorf("Cgroup Manager is not supported in this build")
 }
 
-func (m *unsupportedCgroupManager) MemoryUsage(_ CgroupName) (int64, error) {
-	return -1, errNotSupported
+func (m *unsupportedCgroupManager) GetResourceStats(name CgroupName) (*ResourceStats, error) {
+	return nil, fmt.Errorf("Cgroup Manager is not supported in this build")
 }
 
 func (m *unsupportedCgroupManager) Pids(_ CgroupName) []int {

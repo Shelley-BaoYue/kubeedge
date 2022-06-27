@@ -88,7 +88,10 @@ func (plugin *emptyDirPlugin) GetVolumeName(spec *volume.Spec) (string, error) {
 }
 
 func (plugin *emptyDirPlugin) CanSupport(spec *volume.Spec) bool {
-	return spec.Volume != nil && spec.Volume.EmptyDir != nil
+	if spec.Volume != nil && spec.Volume.EmptyDir != nil {
+		return true
+	}
+	return false
 }
 
 func (plugin *emptyDirPlugin) RequiresRemount(spec *volume.Spec) bool {
@@ -114,14 +117,14 @@ func calculateEmptyDirMemorySize(nodeAllocatableMemory *resource.Quantity, spec 
 		return sizeLimit
 	}
 
-	// size limit defaults to node allocatable (pods can't consume more memory than all pods)
+	// size limit defaults to node allocatable (pods cant consume more memory than all pods)
 	sizeLimit = nodeAllocatableMemory
 	zero := resource.MustParse("0")
 
 	// determine pod resource allocation
 	// we use the same function for pod cgroup assigment to maintain consistent behavior
 	// NOTE: this could be nil on systems that do not support pod memory containment (i.e. windows)
-	podResourceConfig := cm.ResourceConfigForPod(pod, false, uint64(100000), false)
+	podResourceConfig := cm.ResourceConfigForPod(pod, false, uint64(100000))
 	if podResourceConfig != nil && podResourceConfig.Memory != nil {
 		podMemoryLimit := resource.NewQuantity(*(podResourceConfig.Memory), resource.BinarySI)
 		// ensure 0 < value < size
@@ -486,7 +489,7 @@ func (ed *emptyDir) TearDownAt(dir string) error {
 	}
 
 	if pathExists, pathErr := mount.PathExists(dir); pathErr != nil {
-		return fmt.Errorf("error checking if path exists: %w", pathErr)
+		return fmt.Errorf("Error checking if path exists: %v", pathErr)
 	} else if !pathExists {
 		klog.Warningf("Warning: Unmount skipped because path does not exist: %v", dir)
 		return nil

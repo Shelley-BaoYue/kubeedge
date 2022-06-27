@@ -4,20 +4,10 @@
 package yaml
 
 import (
-	"bytes"
 	"io"
 
-	"sigs.k8s.io/kustomize/kyaml/internal/forked/github.com/go-yaml/yaml"
+	"gopkg.in/yaml.v3"
 )
-
-const CompactSequenceStyle = "compact"
-const WideSequenceStyle = "wide"
-
-const DefaultIndent = 2
-const DefaultSequenceStyle = CompactSequenceStyle
-
-var sequenceIndentationStyle = DefaultSequenceStyle
-var indent = DefaultIndent
 
 // Expose the yaml.v3 functions so this package can be used as a replacement
 
@@ -31,22 +21,12 @@ type Style = yaml.Style
 type TypeError = yaml.TypeError
 type Unmarshaler = yaml.Unmarshaler
 
-var Marshal = func(in interface{}) ([]byte, error) {
-	var buf bytes.Buffer
-	err := NewEncoder(&buf).Encode(in)
-	if err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
-}
+var Marshal = yaml.Marshal
 var Unmarshal = yaml.Unmarshal
 var NewDecoder = yaml.NewDecoder
 var NewEncoder = func(w io.Writer) *yaml.Encoder {
 	e := yaml.NewEncoder(w)
-	e.SetIndent(indent)
-	if sequenceIndentationStyle == CompactSequenceStyle {
-		e.CompactSeqIndent()
-	}
+	e.SetIndent(2)
 	return e
 }
 

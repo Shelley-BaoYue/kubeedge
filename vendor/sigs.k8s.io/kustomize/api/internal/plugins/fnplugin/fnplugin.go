@@ -78,7 +78,6 @@ func NewFnPlugin(o *types.FnPluginLoadingOptions) *FnPlugin {
 			EnableExec:     o.EnableExec,
 			StorageMounts:  toStorageMounts(o.Mounts),
 			Env:            o.Env,
-			AsCurrentUser:  o.AsCurrentUser,
 		},
 	}
 }

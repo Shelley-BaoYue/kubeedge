@@ -303,18 +303,16 @@ func (kt *KustTarget) runValidators(ra *accumulator.ResAccumulator) error {
 		if err != nil {
 			return err
 		}
-		newMap := ra.ResMap().DeepCopy()
-		if err = kt.removeValidatedByLabel(newMap); err != nil {
-			return err
-		}
-		if err = orignal.ErrorIfNotEqualSets(newMap); err != nil {
+		new := ra.ResMap().DeepCopy()
+		kt.removeValidatedByLabel(new)
+		if err = orignal.ErrorIfNotEqualSets(new); err != nil {
 			return fmt.Errorf("validator shouldn't modify the resource map: %v", err)
 		}
 	}
 	return nil
 }
 
-func (kt *KustTarget) removeValidatedByLabel(rm resmap.ResMap) error {
+func (kt *KustTarget) removeValidatedByLabel(rm resmap.ResMap) {
 	resources := rm.Resources()
 	for _, r := range resources {
 		labels := r.GetLabels()
@@ -322,11 +320,12 @@ func (kt *KustTarget) removeValidatedByLabel(rm resmap.ResMap) error {
 			continue
 		}
 		delete(labels, konfig.ValidatedByLabelKey)
-		if err := r.SetLabels(labels); err != nil {
-			return err
+		if len(labels) == 0 {
+			r.SetLabels(nil)
+		} else {
+			r.SetLabels(labels)
 		}
 	}
-	return nil
 }
 
 // accumulateResources fills the given resourceAccumulator

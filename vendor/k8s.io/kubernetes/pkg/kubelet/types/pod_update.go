@@ -120,8 +120,8 @@ const (
 	SyncPodUpdate
 	// SyncPodCreate is when the pod is created from source
 	SyncPodCreate
-	// SyncPodKill is when the pod should have no running containers. A pod stopped in this way could be
-	// restarted in the future due config changes.
+	// SyncPodKill is when the pod is killed based on a trigger internal to the kubelet for eviction.
+	// If a SyncPodKill request is made to pod workers, the request is never dropped, and will always be processed.
 	SyncPodKill
 )
 
@@ -142,8 +142,7 @@ func (sp SyncPodType) String() string {
 
 // IsMirrorPod returns true if the passed Pod is a Mirror Pod.
 func IsMirrorPod(pod *v1.Pod) bool {
-	_, ok := pod.Annotations[ConfigMirrorAnnotationKey]
-	return ok
+	return false
 }
 
 // IsStaticPod returns true if the pod is a static pod.
@@ -155,9 +154,6 @@ func IsStaticPod(pod *v1.Pod) bool {
 // IsCriticalPod returns true if pod's priority is greater than or equal to SystemCriticalPriority.
 func IsCriticalPod(pod *v1.Pod) bool {
 	if IsStaticPod(pod) {
-		return true
-	}
-	if IsMirrorPod(pod) {
 		return true
 	}
 	if pod.Spec.Priority != nil && IsCriticalPodBasedOnPriority(*pod.Spec.Priority) {
@@ -183,9 +179,4 @@ func Preemptable(preemptor, preemptee *v1.Pod) bool {
 // IsCriticalPodBasedOnPriority checks if the given pod is a critical pod based on priority resolved from pod Spec.
 func IsCriticalPodBasedOnPriority(priority int32) bool {
 	return priority >= scheduling.SystemCriticalPriority
-}
-
-// IsNodeCriticalPod checks if the given pod is a system-node-critical
-func IsNodeCriticalPod(pod *v1.Pod) bool {
-	return IsCriticalPod(pod) && (pod.Spec.PriorityClassName == scheduling.SystemNodeCritical)
 }

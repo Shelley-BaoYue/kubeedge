@@ -35,7 +35,6 @@ import (
 	podresourcesapi "k8s.io/kubelet/pkg/apis/podresources/v1"
 	kubefeatures "k8s.io/kubernetes/pkg/features"
 	"k8s.io/kubernetes/pkg/kubelet/cadvisor"
-	"k8s.io/kubernetes/pkg/kubelet/cm/admission"
 	"k8s.io/kubernetes/pkg/kubelet/cm/cpumanager"
 	"k8s.io/kubernetes/pkg/kubelet/cm/devicemanager"
 	"k8s.io/kubernetes/pkg/kubelet/cm/memorymanager"
@@ -64,7 +63,9 @@ type containerManagerImpl struct {
 type noopWindowsResourceAllocator struct{}
 
 func (ra *noopWindowsResourceAllocator) Admit(attrs *lifecycle.PodAdmitAttributes) lifecycle.PodAdmitResult {
-	return admission.GetPodAdmitResult(nil)
+	return lifecycle.PodAdmitResult{
+		Admit: true,
+	}
 }
 
 func (cm *containerManagerImpl) Start(node *v1.Node,
@@ -240,17 +241,5 @@ func (cm *containerManagerImpl) GetCPUs(_, _ string) []int64 {
 }
 
 func (cm *containerManagerImpl) GetAllocatableCPUs() []int64 {
-	return nil
-}
-
-func (cm *containerManagerImpl) GetMemory(_, _ string) []*podresourcesapi.ContainerMemory {
-	return nil
-}
-
-func (cm *containerManagerImpl) GetAllocatableMemory() []*podresourcesapi.ContainerMemory {
-	return nil
-}
-
-func (cm *containerManagerImpl) GetNodeAllocatableAbsolute() v1.ResourceList {
 	return nil
 }

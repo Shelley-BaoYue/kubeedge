@@ -20,43 +20,22 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 )
 
 // DefaultFs implements Filesystem using same-named functions from "os" and "io/ioutil"
-type DefaultFs struct {
-	root string
-}
+type DefaultFs struct{}
 
-var _ Filesystem = &DefaultFs{}
-
-// NewTempFs returns a fake Filesystem in temporary directory, useful for unit tests
-func NewTempFs() Filesystem {
-	path, _ := ioutil.TempDir(
-		"",
-		"tmpfs",
-	)
-	return &DefaultFs{
-		root: path,
-	}
-}
-
-func (fs *DefaultFs) prefix(path string) string {
-	if len(fs.root) == 0 {
-		return path
-	}
-	return filepath.Join(fs.root, path)
-}
+var _ Filesystem = DefaultFs{}
 
 // Stat via os.Stat
-func (fs *DefaultFs) Stat(name string) (os.FileInfo, error) {
-	return os.Stat(fs.prefix(name))
+func (DefaultFs) Stat(name string) (os.FileInfo, error) {
+	return os.Stat(name)
 }
 
 // Create via os.Create
-func (fs *DefaultFs) Create(name string) (File, error) {
-	file, err := os.Create(fs.prefix(name))
+func (DefaultFs) Create(name string) (File, error) {
+	file, err := os.Create(name)
 	if err != nil {
 		return nil, err
 	}
@@ -64,49 +43,43 @@ func (fs *DefaultFs) Create(name string) (File, error) {
 }
 
 // Rename via os.Rename
-func (fs *DefaultFs) Rename(oldpath, newpath string) error {
-	if !strings.HasPrefix(oldpath, fs.root) {
-		oldpath = fs.prefix(oldpath)
-	}
-	if !strings.HasPrefix(newpath, fs.root) {
-		newpath = fs.prefix(newpath)
-	}
+func (DefaultFs) Rename(oldpath, newpath string) error {
 	return os.Rename(oldpath, newpath)
 }
 
 // MkdirAll via os.MkdirAll
-func (fs *DefaultFs) MkdirAll(path string, perm os.FileMode) error {
-	return os.MkdirAll(fs.prefix(path), perm)
+func (DefaultFs) MkdirAll(path string, perm os.FileMode) error {
+	return os.MkdirAll(path, perm)
 }
 
 // Chtimes via os.Chtimes
-func (fs *DefaultFs) Chtimes(name string, atime time.Time, mtime time.Time) error {
-	return os.Chtimes(fs.prefix(name), atime, mtime)
+func (DefaultFs) Chtimes(name string, atime time.Time, mtime time.Time) error {
+	return os.Chtimes(name, atime, mtime)
 }
 
 // RemoveAll via os.RemoveAll
-func (fs *DefaultFs) RemoveAll(path string) error {
-	return os.RemoveAll(fs.prefix(path))
+func (DefaultFs) RemoveAll(path string) error {
+	return os.RemoveAll(path)
 }
 
 // Remove via os.RemoveAll
-func (fs *DefaultFs) Remove(name string) error {
-	return os.Remove(fs.prefix(name))
+func (DefaultFs) Remove(name string) error {
+	return os.Remove(name)
 }
 
 // ReadFile via ioutil.ReadFile
-func (fs *DefaultFs) ReadFile(filename string) ([]byte, error) {
-	return ioutil.ReadFile(fs.prefix(filename))
+func (DefaultFs) ReadFile(filename string) ([]byte, error) {
+	return ioutil.ReadFile(filename)
 }
 
 // TempDir via ioutil.TempDir
-func (fs *DefaultFs) TempDir(dir, prefix string) (string, error) {
-	return ioutil.TempDir(fs.prefix(dir), prefix)
+func (DefaultFs) TempDir(dir, prefix string) (string, error) {
+	return ioutil.TempDir(dir, prefix)
 }
 
 // TempFile via ioutil.TempFile
-func (fs *DefaultFs) TempFile(dir, prefix string) (File, error) {
-	file, err := ioutil.TempFile(fs.prefix(dir), prefix)
+func (DefaultFs) TempFile(dir, prefix string) (File, error) {
+	file, err := ioutil.TempFile(dir, prefix)
 	if err != nil {
 		return nil, err
 	}
@@ -114,13 +87,13 @@ func (fs *DefaultFs) TempFile(dir, prefix string) (File, error) {
 }
 
 // ReadDir via ioutil.ReadDir
-func (fs *DefaultFs) ReadDir(dirname string) ([]os.FileInfo, error) {
-	return ioutil.ReadDir(fs.prefix(dirname))
+func (DefaultFs) ReadDir(dirname string) ([]os.FileInfo, error) {
+	return ioutil.ReadDir(dirname)
 }
 
 // Walk via filepath.Walk
-func (fs *DefaultFs) Walk(root string, walkFn filepath.WalkFunc) error {
-	return filepath.Walk(fs.prefix(root), walkFn)
+func (DefaultFs) Walk(root string, walkFn filepath.WalkFunc) error {
+	return filepath.Walk(root, walkFn)
 }
 
 // defaultFile implements File using same-named functions from "os"
