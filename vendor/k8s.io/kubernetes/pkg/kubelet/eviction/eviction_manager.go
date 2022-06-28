@@ -64,6 +64,8 @@ type managerImpl struct {
 	config Config
 	// the function to invoke to kill a pod
 	killPodFunc KillPodFunc
+	// the function to get the mirror pod by a given statid pod
+	mirrorPodFunc MirrorPodFunc
 	// the interface that knows how to do image gc
 	imageGC ImageGC
 	// the interface that knows how to do container gc
@@ -116,6 +118,7 @@ func NewManager(
 	manager := &managerImpl{
 		clock:                        clock,
 		killPodFunc:                  killPodFunc,
+		mirrorPodFunc:                mirrorPodFunc,
 		imageGC:                      imageGC,
 		containerGC:                  containerGC,
 		config:                       config,
@@ -434,8 +437,9 @@ func (m *managerImpl) reclaimNodeLevelResources(signalToReclaim evictionapi.Sign
 		observations, _ := makeSignalObservations(summary)
 		debugLogObservations("observations after resource reclaim", observations)
 
-		// determine the set of thresholds met independent of grace period
-		thresholds := thresholdsMet(m.config.Thresholds, observations, false)
+		// evaluate all thresholds independently of their grace period to see if with
+		// the new observations, we think we have met min reclaim goals
+		thresholds := thresholdsMet(m.config.Thresholds, observations, true)
 		debugLogThresholdsWithObservation("thresholds after resource reclaim - ignoring grace period", thresholds, observations)
 
 		if len(thresholds) == 0 {
@@ -557,15 +561,15 @@ func (m *managerImpl) evictPod(pod *v1.Pod, gracePeriodOverride int64, evictMsg 
 		klog.ErrorS(nil, "Eviction manager: cannot evict a critical pod", "pod", klog.KObj(pod))
 		return false
 	}
-	status := v1.PodStatus{
-		Phase:   v1.PodFailed,
-		Message: evictMsg,
-		Reason:  Reason,
-	}
 	// record that we are evicting the pod
 	m.recorder.AnnotatedEventf(pod, annotations, v1.EventTypeWarning, Reason, evictMsg)
 	// this is a blocking call and should only return when the pod and its containers are killed.
-	err := m.killPodFunc(pod, status, &gracePeriodOverride)
+	klog.V(3).InfoS("Evicting pod", "pod", klog.KObj(pod), "podUID", pod.UID, "message", evictMsg)
+	err := m.killPodFunc(pod, true, &gracePeriodOverride, func(status *v1.PodStatus) {
+		status.Phase = v1.PodFailed
+		status.Reason = Reason
+		status.Message = evictMsg
+	})
 	if err != nil {
 		klog.ErrorS(err, "Eviction manager: pod failed to evict", "pod", klog.KObj(pod))
 	} else {

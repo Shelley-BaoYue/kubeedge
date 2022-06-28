@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -332,7 +333,7 @@ func (m *manager) TerminatePod(pod *v1.Pod) {
 	}
 	status := *oldStatus.DeepCopy()
 	for i := range status.ContainerStatuses {
-		if status.ContainerStatuses[i].State.Terminated != nil || status.ContainerStatuses[i].State.Waiting != nil {
+		if status.ContainerStatuses[i].State.Terminated != nil {
 			continue
 		}
 		status.ContainerStatuses[i].State = v1.ContainerState{
@@ -344,7 +345,7 @@ func (m *manager) TerminatePod(pod *v1.Pod) {
 		}
 	}
 	for i := range status.InitContainerStatuses {
-		if status.InitContainerStatuses[i].State.Terminated != nil || status.InitContainerStatuses[i].State.Waiting != nil {
+		if status.InitContainerStatuses[i].State.Terminated != nil {
 			continue
 		}
 		status.InitContainerStatuses[i].State = v1.ContainerState{
@@ -356,6 +357,7 @@ func (m *manager) TerminatePod(pod *v1.Pod) {
 		}
 	}
 
+	klog.V(5).InfoS("TerminatePod calling updateStatusInternal", "pod", klog.KObj(pod), "podUID", pod.UID)
 	m.updateStatusInternal(pod, status, true)
 }
 
@@ -393,6 +395,8 @@ func (m *manager) updateStatusInternal(pod *v1.Pod, status v1.PodStatus, forceUp
 	cachedStatus, isCached := m.podStatuses[pod.UID]
 	if isCached {
 		oldStatus = cachedStatus.status
+	} else if mirrorPod, ok := m.podManager.GetMirrorPodByPod(pod); ok {
+		oldStatus = mirrorPod.Status
 	} else {
 		oldStatus = pod.Status
 	}
@@ -429,10 +433,43 @@ func (m *manager) updateStatusInternal(pod *v1.Pod, status v1.PodStatus, forceUp
 	}
 
 	normalizeStatus(pod, &status)
+
+	// Perform some more extensive logging of container termination state to assist in
+	// debugging production races (generally not needed).
+	if klog.V(5).Enabled() {
+		var containers []string
+		for _, s := range append(append([]v1.ContainerStatus(nil), status.InitContainerStatuses...), status.ContainerStatuses...) {
+			var current, previous string
+			switch {
+			case s.State.Running != nil:
+				current = "running"
+			case s.State.Waiting != nil:
+				current = "waiting"
+			case s.State.Terminated != nil:
+				current = fmt.Sprintf("terminated=%d", s.State.Terminated.ExitCode)
+			default:
+				current = "unknown"
+			}
+			switch {
+			case s.LastTerminationState.Running != nil:
+				previous = "running"
+			case s.LastTerminationState.Waiting != nil:
+				previous = "waiting"
+			case s.LastTerminationState.Terminated != nil:
+				previous = fmt.Sprintf("terminated=%d", s.LastTerminationState.Terminated.ExitCode)
+			default:
+				previous = "<none>"
+			}
+			containers = append(containers, fmt.Sprintf("(%s state=%s previous=%s)", s.Name, current, previous))
+		}
+		sort.Strings(containers)
+		klog.InfoS("updateStatusInternal", "version", cachedStatus.version+1, "pod", klog.KObj(pod), "podUID", pod.UID, "containers", strings.Join(containers, " "))
+	}
+
 	// The intent here is to prevent concurrent updates to a pod's status from
 	// clobbering each other so the phase of a pod progresses monotonically.
 	if isCached && isPodStatusByKubeletEqual(&cachedStatus.status, &status) && !forceUpdate {
-		klog.V(5).InfoS("Ignoring same status for pod", "pod", klog.KObj(pod), "status", status)
+		klog.V(3).InfoS("Ignoring same status for pod", "pod", klog.KObj(pod), "status", status)
 		return false // No new status.
 	}
 
@@ -499,6 +536,7 @@ func (m *manager) RemoveOrphanedStatuses(podUIDs map[types.UID]bool) {
 // syncBatch syncs pods statuses with the apiserver.
 func (m *manager) syncBatch() {
 	var updatedStatuses []podStatusSyncRequest
+	podToMirror, mirrorToPod := m.podManager.GetUIDTranslations()
 	func() { // Critical section
 		m.podStatusesLock.RLock()
 		defer m.podStatusesLock.RUnlock()
@@ -506,13 +544,23 @@ func (m *manager) syncBatch() {
 		// Clean up orphaned versions.
 		for uid := range m.apiStatusVersions {
 			_, hasPod := m.podStatuses[types.UID(uid)]
-			if !hasPod {
+			_, hasMirror := mirrorToPod[uid]
+			if !hasPod && !hasMirror {
 				delete(m.apiStatusVersions, uid)
 			}
 		}
 
 		for uid, status := range m.podStatuses {
 			syncedUID := kubetypes.MirrorPodUID(uid)
+			if mirrorUID, ok := podToMirror[kubetypes.ResolvedPodUID(uid)]; ok {
+				if mirrorUID == "" {
+					klog.V(5).InfoS("Static pod does not have a corresponding mirror pod; skipping",
+						"podUID", uid,
+						"pod", klog.KRef(status.podNamespace, status.podName))
+					continue
+				}
+				syncedUID = mirrorUID
+			}
 			if m.needsUpdate(types.UID(syncedUID), status) {
 				updatedStatuses = append(updatedStatuses, podStatusSyncRequest{uid, status})
 			} else if m.needsReconcile(uid, status.status) {
@@ -553,7 +601,7 @@ func (m *manager) syncPod(uid types.UID, status versionedPodStatus) {
 		klog.InfoS("Failed to get status for pod",
 			"podUID", uid,
 			"pod", klog.KRef(status.podNamespace, status.podName),
-			"error", err)
+			"err", err)
 		return
 	}
 
@@ -570,7 +618,7 @@ func (m *manager) syncPod(uid types.UID, status versionedPodStatus) {
 
 	oldStatus := pod.Status.DeepCopy()
 	newPod, patchBytes, unchanged, err := statusutil.PatchPodStatus(m.kubeClient, pod.Namespace, pod.Name, pod.UID, *oldStatus, mergePodStatus(*oldStatus, status.status))
-	klog.V(3).InfoS("Patch status for pod", "pod", klog.KObj(pod), "patchBytes", patchBytes)
+	klog.V(3).InfoS("Patch status for pod", "pod", klog.KObj(pod), "patch", string(patchBytes))
 
 	if err != nil {
 		klog.InfoS("Failed to update status for pod", "pod", klog.KObj(pod), "err", err)
@@ -639,6 +687,15 @@ func (m *manager) needsReconcile(uid types.UID, status v1.PodStatus) bool {
 	if !ok {
 		klog.V(4).InfoS("Pod has been deleted, no need to reconcile", "podUID", string(uid))
 		return false
+	}
+	// If the pod is a static pod, we should check its mirror pod, because only status in mirror pod is meaningful to us.
+	if kubetypes.IsStaticPod(pod) {
+		mirrorPod, ok := m.podManager.GetMirrorPodByPod(pod)
+		if !ok {
+			klog.V(4).InfoS("Static pod has no corresponding mirror pod, no need to reconcile", "pod", klog.KObj(pod))
+			return false
+		}
+		pod = mirrorPod
 	}
 
 	podStatus := pod.Status.DeepCopy()

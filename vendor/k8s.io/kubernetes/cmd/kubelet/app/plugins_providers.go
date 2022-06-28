@@ -34,20 +34,14 @@ type probeFn func() []volume.VolumePlugin
 
 func appendPluginBasedOnFeatureFlags(plugins []volume.VolumePlugin, inTreePluginName string,
 	featureGate featuregate.FeatureGate, pluginInfo pluginInfo) ([]volume.VolumePlugin, error) {
-	// Skip appending the in-tree plugin to the list of plugins to be probed/initialized
-	// if the CSIMigration feature flag and plugin specific feature flag indicating
-	// CSI migration is complete
-	migrationComplete, err := csimigration.CheckMigrationFeatureFlags(featureGate, pluginInfo.pluginMigrationFeature,
-		pluginInfo.pluginMigrationCompleteFeature, pluginInfo.pluginUnregisterFeature)
+	_, err := csimigration.CheckMigrationFeatureFlags(featureGate, pluginInfo.pluginMigrationFeature, pluginInfo.pluginUnregisterFeature)
 	if err != nil {
 		klog.InfoS("Unexpected CSI Migration Feature Flags combination detected, CSI Migration may not take effect", "err", err)
 		// TODO: fail and return here once alpha only tests can set the feature flags for a plugin correctly
 	}
-	// TODO: This can be removed after feature flag CSIMigrationvSphereComplete is removed.
-	if migrationComplete {
-		klog.InfoS("Skipped registration of plugin since migration is completed", "pluginName", inTreePluginName)
-		return plugins, nil
-	}
+
+	// Skip appending the in-tree plugin to the list of plugins to be probed/initialized
+	// if the plugin unregister feature flag is set
 	if featureGate.Enabled(pluginInfo.pluginUnregisterFeature) {
 		klog.InfoS("Skipped registration of plugin since feature flag is enabled", "pluginName", inTreePluginName, "featureFlag", pluginInfo.pluginUnregisterFeature)
 		return plugins, nil
@@ -58,11 +52,9 @@ func appendPluginBasedOnFeatureFlags(plugins []volume.VolumePlugin, inTreePlugin
 }
 
 type pluginInfo struct {
-	pluginMigrationFeature featuregate.Feature
-	// deprecated, only to keep here for vSphere
-	pluginMigrationCompleteFeature featuregate.Feature
-	pluginUnregisterFeature        featuregate.Feature
-	pluginProbeFunction            probeFn
+	pluginMigrationFeature  featuregate.Feature
+	pluginUnregisterFeature featuregate.Feature
+	pluginProbeFunction     probeFn
 }
 
 func appendLegacyProviderVolumes(allPlugins []volume.VolumePlugin, featureGate featuregate.FeatureGate) ([]volume.VolumePlugin, error) {
