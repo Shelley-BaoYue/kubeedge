@@ -210,7 +210,7 @@ func MakeKubeClientBridge(kubeletDeps *kubelet.Dependencies) {
 	client := kubebridge.NewSimpleClientset(metaclient.New())
 
 	kubeletDeps.KubeClient = client
-	kubeletDeps.EventClient = client.CoreV1()
+	kubeletDeps.EventClient = nil
 	kubeletDeps.HeartbeatClient = client
 }
 
