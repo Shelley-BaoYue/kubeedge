@@ -24,12 +24,15 @@ and made some variant
 package edged
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"time"
 
+	"github.com/container-storage-interface/spec/lib/go/csi"
+	"github.com/golang/protobuf/jsonpb"
 	v1 "k8s.io/api/core/v1"
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	"k8s.io/component-base/featuregate"
@@ -40,6 +43,7 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/config"
 	"k8s.io/kubernetes/pkg/kubelet/nodestatus"
 	kubelettypes "k8s.io/kubernetes/pkg/kubelet/types"
+	csiplugin "k8s.io/kubernetes/pkg/volume/csi"
 
 	"github.com/kubeedge/beehive/pkg/core"
 	beehiveContext "github.com/kubeedge/beehive/pkg/core/context"
@@ -198,6 +202,15 @@ func (e *edged) syncPod(podCfg *config.PodConfig) {
 					continue
 				}
 			}
+		case constants.CSIResourceTypeVolume:
+			klog.Infof("volume operation type %s", op)
+			res, err := e.handleVolume(op, content)
+			if err != nil {
+				klog.Errorf("handle volume failed: %v", err)
+			} else {
+				resp := result.NewRespByMessage(&result, res)
+				beehiveContext.SendResp(*resp)
+			}
 		default:
 			klog.Errorf("resType is not pod or configmap or secret or volume: resType is %s", resType)
 			continue
@@ -293,6 +306,93 @@ func (e *edged) handlePodListFromEdgeController(content []byte, podCfg *config.P
 	}
 
 	return nil
+}
+
+func (e *edged) handleVolume(op string, content []byte) (interface{}, error) {
+	switch op {
+	case constants.CSIOperationTypeCreateVolume:
+		return e.createVolume(content)
+	case constants.CSIOperationTypeDeleteVolume:
+		return e.deleteVolume(content)
+	case constants.CSIOperationTypeControllerPublishVolume:
+		return e.controllerPublishVolume(content)
+	case constants.CSIOperationTypeControllerUnpublishVolume:
+		return e.controllerUnpublishVolume(content)
+	}
+	return nil, nil
+}
+
+func (e *edged) createVolume(content []byte) (interface{}, error) {
+	req := &csi.CreateVolumeRequest{}
+	err := jsonpb.Unmarshal(bytes.NewReader(content), req)
+	if err != nil {
+		klog.Errorf("unmarshal create volume req error: %v", err)
+		return nil, err
+	}
+
+	klog.V(4).Infof("start create volume: %s", req.Name)
+	ctl := csiplugin.NewController()
+	res, err := ctl.CreateVolume(req)
+	if err != nil {
+		klog.Errorf("create volume error: %v", err)
+		return nil, err
+	}
+	klog.V(4).Infof("end create volume: %s result: %v", req.Name, res)
+	return res, nil
+}
+
+func (e *edged) deleteVolume(content []byte) (interface{}, error) {
+	req := &csi.DeleteVolumeRequest{}
+	err := jsonpb.Unmarshal(bytes.NewReader(content), req)
+	if err != nil {
+		klog.Errorf("unmarshal delete volume req error: %v", err)
+		return nil, err
+	}
+	klog.V(4).Infof("start delete volume: %s", req.VolumeId)
+	ctl := csiplugin.NewController()
+	res, err := ctl.DeleteVolume(req)
+	if err != nil {
+		klog.Errorf("delete volume error: %v", err)
+		return nil, err
+	}
+	klog.V(4).Infof("end delete volume: %s result: %v", req.VolumeId, res)
+	return res, nil
+}
+
+func (e *edged) controllerPublishVolume(content []byte) (interface{}, error) {
+	req := &csi.ControllerPublishVolumeRequest{}
+	err := jsonpb.Unmarshal(bytes.NewReader(content), req)
+	if err != nil {
+		klog.Errorf("unmarshal controller publish volume req error: %v", err)
+		return nil, err
+	}
+	klog.V(4).Infof("start controller publish volume: %s", req.VolumeId)
+	ctl := csiplugin.NewController()
+	res, err := ctl.ControllerPublishVolume(req)
+	if err != nil {
+		klog.Errorf("controller publish volume error: %v", err)
+		return nil, err
+	}
+	klog.V(4).Infof("end controller publish volume:: %s result: %v", req.VolumeId, res)
+	return res, nil
+}
+
+func (e *edged) controllerUnpublishVolume(content []byte) (interface{}, error) {
+	req := &csi.ControllerUnpublishVolumeRequest{}
+	err := jsonpb.Unmarshal(bytes.NewReader(content), req)
+	if err != nil {
+		klog.Errorf("unmarshal controller publish volume req error: %v", err)
+		return nil, err
+	}
+	klog.V(4).Infof("start controller unpublish volume: %s", req.VolumeId)
+	ctl := csiplugin.NewController()
+	res, err := ctl.ControllerUnpublishVolume(req)
+	if err != nil {
+		klog.Errorf("controller unpublish volume error: %v", err)
+		return nil, err
+	}
+	klog.V(4).Infof("end controller unpublish volume:: %s result: %v", req.VolumeId, res)
+	return res, nil
 }
 
 func filterPodByNodeName(pod *v1.Pod, nodeName string) bool {
