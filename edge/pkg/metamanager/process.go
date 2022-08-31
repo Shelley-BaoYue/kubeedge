@@ -130,7 +130,7 @@ func (m *metaManager) processInsert(message model.Message) {
 	}
 
 	if (resType == model.ResourceTypeNode || resType == model.ResourceTypeLease) && message.GetSource() == modules.EdgedModuleName {
-		m.processRemoteInsert(message)
+		sendToCloud(&message)
 		return
 	}
 
@@ -139,31 +139,6 @@ func (m *metaManager) processInsert(message model.Message) {
 
 	resp := message.NewRespByMessage(&message, OK)
 	sendToCloud(resp)
-}
-
-func (m *metaManager) processRemoteInsert(message model.Message) {
-	go func() {
-		// TODO: retry
-		originalID := message.GetID()
-		message.UpdateID()
-		resp, err := beehiveContext.SendSync(
-			string(metaManagerConfig.Config.ContextSendModule),
-			message,
-			time.Duration(metaManagerConfig.Config.RemoteQueryTimeout)*time.Second)
-		klog.Infof("########## process insert: resource[%s], err[%+v]", message.GetResource(), err)
-		klog.V(2).Infof("########## process insert: req[%+v], resp[%+v], err[%+v]", message, resp, err)
-		if err != nil {
-			klog.Errorf("remote insert failed: %v", err)
-			feedbackError(err, "Error to remote insert", message)
-			return
-		}
-
-		resp.BuildHeader(resp.GetID(), originalID, resp.GetTimestamp())
-		sendToEdged(&resp, message.IsSync())
-
-		respToCloud := message.NewRespByMessage(&resp, OK)
-		sendToCloud(respToCloud)
-	}()
 }
 
 func (m *metaManager) processUpdate(message model.Message) {
@@ -199,14 +174,10 @@ func (m *metaManager) processUpdate(message model.Message) {
 	msgSource := message.GetSource()
 	switch msgSource {
 	case modules.EdgedModuleName:
-		if resType == model.ResourceTypeLease {
-			m.processRemoteInsert(message)
-			return
-		}
 		sendToCloud(&message)
 		// For pod status update message, we need to wait for the response message
 		// to ensure that the pod status is correctly reported to the kube-apiserver
-		if resType != model.ResourceTypePodStatus {
+		if resType != model.ResourceTypePodStatus && resType != model.ResourceTypeLease {
 			resp := message.NewRespByMessage(&message, OK)
 			sendToEdged(resp, message.IsSync())
 		}
@@ -303,7 +274,7 @@ func (m *metaManager) processDelete(message model.Message) {
 	_, resType, _ := parseResource(message.GetResource())
 
 	if resType == model.ResourceTypePod && message.GetSource() == modules.EdgedModuleName {
-		m.processRemoteDelete(message)
+		sendToCloud(&message)
 		return
 	}
 
@@ -324,31 +295,6 @@ func (m *metaManager) processDelete(message model.Message) {
 	sendToEdged(&message, false)
 	resp := message.NewRespByMessage(&message, OK)
 	sendToCloud(resp)
-}
-
-func (m *metaManager) processRemoteDelete(message model.Message) {
-	go func() {
-		// TODO: retry
-		originalID := message.GetID()
-		message.UpdateID()
-		resp, err := beehiveContext.SendSync(
-			string(metaManagerConfig.Config.ContextSendModule),
-			message,
-			time.Duration(metaManagerConfig.Config.RemoteQueryTimeout)*time.Second)
-		klog.Infof("########## process delete: resource[%s], err[%+v]", message.GetResource(), err)
-		klog.V(2).Infof("########## process delete: req[%+v], resp[%+v], err[%+v]", message, resp, err)
-		if err != nil {
-			klog.Errorf("remote delete failed: %v", err)
-			feedbackError(err, "Error to remote delete", message)
-			return
-		}
-
-		resp.BuildHeader(resp.GetID(), originalID, resp.GetTimestamp())
-		sendToEdged(&resp, message.IsSync())
-
-		respToCloud := message.NewRespByMessage(&resp, OK)
-		sendToCloud(respToCloud)
-	}()
 }
 
 func (m *metaManager) processQuery(message model.Message) {
