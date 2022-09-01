@@ -51,7 +51,19 @@ func newPods(namespace string, s SendInterface) *pods {
 }
 
 func (c *pods) Create(cm *api.Pod) (*api.Pod, error) {
-	return nil, nil
+	resource := fmt.Sprintf("%s/%s/%s", c.namespace, model.ResourceTypePod, cm.Name)
+	podMsg := message.BuildMsg(modules.MetaGroup, "", modules.EdgedModuleName, resource, model.InsertOperation, cm)
+	resp, err := c.send.SendSync(podMsg)
+	if err != nil {
+		return nil, fmt.Errorf("create node failed, err: %v", err)
+	}
+
+	content, err := resp.GetContentData()
+	if err != nil {
+		return nil, fmt.Errorf("parse message to node failed, err: %v", err)
+	}
+
+	return handlePodResp(content)
 }
 
 func (c *pods) Update(cm *api.Pod) error {

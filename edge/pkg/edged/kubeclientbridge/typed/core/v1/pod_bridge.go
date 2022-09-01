@@ -17,6 +17,10 @@ type PodsBridge struct {
 	MetaClient client.CoreInterface
 }
 
+func(c *PodsBridge) Create(ctx context.Context, pod *corev1.Pod, opts metav1.CreateOptions) (*corev1.Pod, error) {
+	return c.MetaClient.Pods(c.ns).Create(pod)
+}
+
 func (c *PodsBridge) Get(ctx context.Context, name string, options metav1.GetOptions) (result *corev1.Pod, err error) {
 	return c.MetaClient.Pods(c.ns).Get(name)
 }

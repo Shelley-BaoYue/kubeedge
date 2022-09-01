@@ -118,6 +118,7 @@ type UpstreamController struct {
 	createNodeChan            chan model.Message
 	patchNodeChan             chan model.Message
 	updateNodeChan            chan model.Message
+	createPodChan             chan model.Message
 	patchPodChan              chan model.Message
 	podDeleteChan             chan model.Message
 	ruleStatusChan            chan model.Message
@@ -174,6 +175,9 @@ func (uc *UpstreamController) Start() error {
 	}
 	for i := 0; i < int(uc.config.Load.UpdateNodeWorkers); i++ {
 		go uc.updateNode()
+	}
+	for i := 0; i < int(uc.config.Load.CreatePodWorkers); i++ {
+		go uc.createPod()
 	}
 	for i := 0; i < int(uc.config.Load.PatchPodWorkers); i++ {
 		go uc.patchPod()
@@ -251,9 +255,12 @@ func (uc *UpstreamController) dispatchMessage() {
 		case model.ResourceTypePodPatch:
 			uc.patchPodChan <- msg
 		case model.ResourceTypePod:
-			if msg.GetOperation() == model.DeleteOperation {
+			switch msg.GetOperation() {
+			case model.InsertOperation:
+				uc.createPodChan <- msg
+			case model.DeleteOperation:
 				uc.podDeleteChan <- msg
-			} else {
+			default:
 				klog.Errorf("message: %s, operation type: %s unsupported", msg.GetID(), msg.GetOperation())
 			}
 		case model.ResourceTypeRuleStatus:
@@ -986,6 +993,57 @@ func (uc *UpstreamController) updateNode() {
 				continue
 			}
 			klog.V(4).Infof("message: %s process successfully", msg.GetID())
+		}
+	}
+}
+
+func (uc *UpstreamController) createPod() {
+	for {
+		select {
+		case <-beehiveContext.Done():
+			klog.Warning("stop create pod")
+			return
+		case msg := <-uc.createPodChan:
+			klog.V(5).Infof("message: %s, operation is: %s, and resource is %s", msg.GetID(), msg.GetOperation(), msg.GetResource())
+
+			data, err := msg.GetContentData()
+			if err != nil {
+				klog.Warningf("message: %s process failure, get content data failed with error: %s", msg.GetID(), err)
+				continue
+			}
+
+			namespace, err := messagelayer.GetNamespace(msg)
+			if err != nil {
+				klog.Warningf("message: %s process failure, get namespace failed with error: %s", msg.GetID(), err)
+				continue
+			}
+			name, err := messagelayer.GetResourceName(msg)
+			if err != nil {
+				klog.Warningf("message: %s process failure, get resource name failed with error: %s", msg.GetID(), err)
+				continue
+			}
+
+			pod := &v1.Pod{}
+			err = json.Unmarshal(data, pod)
+			if err != nil {
+				klog.Errorf("message: %s process failure, unmarshal marshaled message content with error: %s", msg.GetID(), err)
+				continue
+			}
+
+			resp, err := uc.kubeClient.CoreV1().Pods(namespace).Create(context.Background(), pod, metaV1.CreateOptions{})
+			if err != nil {
+				klog.Errorf("create pod %s error: %v", name, err)
+			}
+
+			resMsg := model.NewMessage(msg.GetID()).
+				FillBody(&ObjectResp{Object: resp, Err: err}).
+				BuildRouter(modules.EdgeControllerModuleName, constants.GroupResource, msg.GetResource(), model.ResponseOperation)
+			if err = uc.messageLayer.Response(*resMsg); err != nil {
+				klog.Warningf("Response message: %s failed, response failed with error: %s", msg.GetID(), err)
+				continue
+			}
+
+			klog.V(4).Infof("message: %s, create pod successfully, namespace: %s, name: %s", msg.GetID(), namespace, name)
 		}
 	}
 }

@@ -129,7 +129,7 @@ func (m *metaManager) processInsert(message model.Message) {
 		return
 	}
 
-	if (resType == model.ResourceTypeNode || resType == model.ResourceTypeLease) && message.GetSource() == modules.EdgedModuleName {
+	if (resType == model.ResourceTypeNode || resType == model.ResourceTypeLease || resType == model.ResourceTypePod) && message.GetSource() == modules.EdgedModuleName {
 		sendToCloud(&message)
 		return
 	}
