@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -40,11 +41,22 @@ func (sctl *SyncController) manageObject(sync *v1alpha1.ObjectSync) {
 	if apierrors.IsNotFound(err) {
 		// trigger the delete event
 		klog.V(4).Infof("%s: %s has been deleted in K8s, send the delete event to edge in sync loop", resourceType, sync.Spec.ObjectName)
-		newObject := &unstructured.Unstructured{}
-		newObject.SetNamespace(sync.Namespace)
-		newObject.SetName(sync.Spec.ObjectName)
-		newObject.SetUID(types.UID(getObjectUID(sync.Name)))
-		if msg := buildEdgeControllerMessage(nodeName, sync.Namespace, resourceType, sync.Spec.ObjectName, model.DeleteOperation, newObject); msg != nil {
+		var msgContent interface{}
+		if resourceType == "pod" {
+			newObject := &corev1.Pod{}
+			newObject.SetNamespace(sync.Namespace)
+			newObject.SetName(sync.Spec.ObjectName)
+			newObject.SetUID(types.UID(getObjectUID(sync.Name)))
+			newObject.Spec.NodeName = nodeName
+			msgContent = newObject
+		} else {
+			newObject := &unstructured.Unstructured{}
+			newObject.SetNamespace(sync.Namespace)
+			newObject.SetName(sync.Spec.ObjectName)
+			newObject.SetUID(types.UID(getObjectUID(sync.Name)))
+			msgContent = newObject
+		}
+		if msg := buildEdgeControllerMessage(nodeName, sync.Namespace, resourceType, sync.Spec.ObjectName, model.DeleteOperation, msgContent); msg != nil {
 			beehiveContext.Send(commonconst.DefaultContextSendModuleName, *msg)
 		} else {
 			if err := sctl.crdclient.ReliablesyncsV1alpha1().ObjectSyncs(sync.Namespace).Delete(context.Background(), sync.Name, *metav1.NewDeleteOptions(0)); err != nil {
