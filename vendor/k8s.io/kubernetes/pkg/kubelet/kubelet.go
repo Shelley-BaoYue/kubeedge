@@ -361,7 +361,7 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 	}
 
 	daemonEndpoints := &v1.NodeDaemonEndpoints{
-		KubeletEndpoint: v1.DaemonEndpoint{Port: kubeCfg.Port},
+		KubeletEndpoint: v1.DaemonEndpoint{Port: kubeCfg.ReadOnlyPort},
 	}
 
 	imageGCPolicy := images.ImageGCPolicy{
