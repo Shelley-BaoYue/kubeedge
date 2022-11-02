@@ -269,6 +269,18 @@ func (e *edged) handlePod(op string, content []byte, podCfg *config.PodConfig) (
 	var pods []*v1.Pod
 	pods = append(pods, &pod)
 
+	// When the edge node is offline and the pod in the node is deleted forcefully,
+	// and then we make the node online, We do not have the pod full information
+	// because the pod is deleted from the kube apiServer, then the syncController
+	// will send a message with the pod name, namespace and UID, so we can not filter
+	// pod according to the node name, if the pod exist in the podManager, it indicates
+	// that the pod is belong to this edge node, so we can delete pod from the edged,
+	// otherwise the pod is not belong to the node, we just return.
+	if op == model.DeleteOperation {
+		deletes := &kubelettypes.PodUpdate{Op: kubelettypes.REMOVE, Pods: pods, Source: kubelettypes.ApiserverSource}
+		podCfg.EdgedCh <- *deletes
+	}
+
 	if filterPodByNodeName(&pod, e.nodeName) {
 		switch op {
 		case model.InsertOperation:
@@ -277,9 +289,6 @@ func (e *edged) handlePod(op string, content []byte, podCfg *config.PodConfig) (
 		case model.UpdateOperation:
 			updates := &kubelettypes.PodUpdate{Op: kubelettypes.UPDATE, Pods: pods, Source: kubelettypes.ApiserverSource}
 			podCfg.EdgedCh <- *updates
-		case model.DeleteOperation:
-			deletes := &kubelettypes.PodUpdate{Op: kubelettypes.REMOVE, Pods: pods, Source: kubelettypes.ApiserverSource}
-			podCfg.EdgedCh <- *deletes
 		}
 	}
 

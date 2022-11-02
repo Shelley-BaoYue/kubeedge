@@ -653,19 +653,16 @@ func (m *kubeGenericRuntimeManager) restoreSpecsFromContainerLabels(containerID 
 // * Stop the container.
 func (m *kubeGenericRuntimeManager) killContainer(pod *v1.Pod, containerID kubecontainer.ContainerID, containerName string, message string, reason containerKillReason, gracePeriodOverride *int64) error {
 	var containerSpec *v1.Container
-	if pod != nil {
-		if containerSpec = kubecontainer.GetContainerSpec(pod, containerName); containerSpec == nil {
-			return fmt.Errorf("failed to get containerSpec %q (id=%q) in pod %q when killing container for reason %q",
-				containerName, containerID.String(), format.Pod(pod), message)
-		}
-	} else {
+	if containerSpec = kubecontainer.GetContainerSpec(pod, containerName); containerSpec == nil {
+		klog.Warningf("failed to get containerSpec %q (id=%q) in pod %q when killing container for reason %q",
+					containerName, containerID.String(), format.Pod(pod), message)
 		// Restore necessary information if one of the specs is nil.
 		restoredPod, restoredContainer, err := m.restoreSpecsFromContainerLabels(containerID)
 		if err != nil {
 			return err
 		}
 		pod, containerSpec = restoredPod, restoredContainer
-	}
+	}	
 
 	// From this point, pod and container must be non-nil.
 	gracePeriod := int64(minimumGracePeriodInSeconds)
