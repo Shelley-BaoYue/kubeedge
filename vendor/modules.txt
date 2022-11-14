@@ -116,6 +116,7 @@ github.com/aws/aws-sdk-go/internal/shareddefaults
 github.com/aws/aws-sdk-go/internal/strings
 github.com/aws/aws-sdk-go/internal/sync/singleflight
 github.com/aws/aws-sdk-go/private/protocol
+github.com/aws/aws-sdk-go/private/protocol/ec2query
 github.com/aws/aws-sdk-go/private/protocol/json/jsonutil
 github.com/aws/aws-sdk-go/private/protocol/jsonrpc
 github.com/aws/aws-sdk-go/private/protocol/query
@@ -123,6 +124,7 @@ github.com/aws/aws-sdk-go/private/protocol/query/queryutil
 github.com/aws/aws-sdk-go/private/protocol/rest
 github.com/aws/aws-sdk-go/private/protocol/restjson
 github.com/aws/aws-sdk-go/private/protocol/xml/xmlutil
+github.com/aws/aws-sdk-go/service/ec2
 github.com/aws/aws-sdk-go/service/ecr
 github.com/aws/aws-sdk-go/service/sso
 github.com/aws/aws-sdk-go/service/sso/ssoiface
@@ -648,6 +650,7 @@ github.com/opencontainers/selinux/pkg/pwalk
 # github.com/peterbourgon/diskv v2.0.1+incompatible
 github.com/peterbourgon/diskv
 # github.com/pkg/errors v0.9.1
+## explicit
 github.com/pkg/errors
 # github.com/pmezard/go-difflib v1.0.0
 github.com/pmezard/go-difflib/difflib
@@ -828,10 +831,13 @@ go.uber.org/zap/zapgrpc
 golang.org/x/crypto/bcrypt
 golang.org/x/crypto/blowfish
 golang.org/x/crypto/cast5
+golang.org/x/crypto/chacha20
 golang.org/x/crypto/cryptobyte
 golang.org/x/crypto/cryptobyte/asn1
 golang.org/x/crypto/curve25519
 golang.org/x/crypto/curve25519/internal/field
+golang.org/x/crypto/ed25519
+golang.org/x/crypto/ed25519/internal/edwards25519
 golang.org/x/crypto/hkdf
 golang.org/x/crypto/internal/subtle
 golang.org/x/crypto/nacl/secretbox
@@ -848,6 +854,8 @@ golang.org/x/crypto/pkcs12/internal/rc2
 golang.org/x/crypto/poly1305
 golang.org/x/crypto/salsa20/salsa
 golang.org/x/crypto/scrypt
+golang.org/x/crypto/ssh
+golang.org/x/crypto/ssh/internal/bcrypt_pbkdf
 # golang.org/x/mod v0.4.2
 golang.org/x/mod/module
 golang.org/x/mod/semver
@@ -1043,6 +1051,7 @@ gopkg.in/tomb.v2
 # gopkg.in/yaml.v2 v2.4.0
 gopkg.in/yaml.v2
 # gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b
+## explicit
 gopkg.in/yaml.v3
 # helm.sh/helm/v3 v3.7.2
 ## explicit
@@ -1379,6 +1388,7 @@ k8s.io/client-go/applyconfigurations/storage/v1alpha1
 k8s.io/client-go/applyconfigurations/storage/v1beta1
 k8s.io/client-go/discovery
 k8s.io/client-go/discovery/cached/disk
+k8s.io/client-go/discovery/cached/memory
 k8s.io/client-go/discovery/fake
 k8s.io/client-go/dynamic
 k8s.io/client-go/dynamic/dynamicinformer
@@ -1603,6 +1613,7 @@ k8s.io/client-go/tools/leaderelection
 k8s.io/client-go/tools/leaderelection/resourcelock
 k8s.io/client-go/tools/metrics
 k8s.io/client-go/tools/pager
+k8s.io/client-go/tools/portforward
 k8s.io/client-go/tools/record
 k8s.io/client-go/tools/record/util
 k8s.io/client-go/tools/reference
@@ -1618,10 +1629,12 @@ k8s.io/client-go/util/flowcontrol
 k8s.io/client-go/util/homedir
 k8s.io/client-go/util/jsonpath
 k8s.io/client-go/util/keyutil
+k8s.io/client-go/util/retry
 k8s.io/client-go/util/workqueue
 # k8s.io/cloud-provider v0.22.6 => github.com/kubeedge/kubernetes/staging/src/k8s.io/cloud-provider v1.22.6-kubeedge3
 ## explicit
 k8s.io/cloud-provider/credentialconfig
+k8s.io/cloud-provider/service/helpers
 k8s.io/cloud-provider/volume/errors
 # k8s.io/cluster-bootstrap v0.22.6 => github.com/kubeedge/kubernetes/staging/src/k8s.io/cluster-bootstrap v1.22.6-kubeedge3
 ## explicit
@@ -1666,6 +1679,7 @@ k8s.io/component-base/logs/logreduction
 k8s.io/component-base/logs/sanitization
 k8s.io/component-base/metrics
 k8s.io/component-base/metrics/legacyregistry
+k8s.io/component-base/metrics/prometheus/ratelimiter
 k8s.io/component-base/metrics/prometheus/workqueue
 k8s.io/component-base/metrics/testutil
 k8s.io/component-base/term
@@ -1721,10 +1735,12 @@ k8s.io/kube-scheduler/config/v1beta2
 k8s.io/kube-scheduler/extender/v1
 # k8s.io/kubectl v0.22.4 => github.com/kubeedge/kubernetes/staging/src/k8s.io/kubectl v1.22.6-kubeedge3
 k8s.io/kubectl/pkg/cmd/util
+k8s.io/kubectl/pkg/scale
 k8s.io/kubectl/pkg/scheme
 k8s.io/kubectl/pkg/util/interrupt
 k8s.io/kubectl/pkg/util/openapi
 k8s.io/kubectl/pkg/util/openapi/validation
+k8s.io/kubectl/pkg/util/podutils
 k8s.io/kubectl/pkg/util/templates
 k8s.io/kubectl/pkg/util/term
 k8s.io/kubectl/pkg/validation
@@ -1851,6 +1867,15 @@ k8s.io/kubernetes/pkg/apis/storage/v1alpha1
 k8s.io/kubernetes/pkg/apis/storage/v1beta1
 k8s.io/kubernetes/pkg/capabilities
 k8s.io/kubernetes/pkg/cluster/ports
+k8s.io/kubernetes/pkg/controller
+k8s.io/kubernetes/pkg/controller/daemon
+k8s.io/kubernetes/pkg/controller/daemon/util
+k8s.io/kubernetes/pkg/controller/deployment/util
+k8s.io/kubernetes/pkg/controller/job
+k8s.io/kubernetes/pkg/controller/job/metrics
+k8s.io/kubernetes/pkg/controller/replicaset
+k8s.io/kubernetes/pkg/controller/replicaset/metrics
+k8s.io/kubernetes/pkg/controller/replication
 k8s.io/kubernetes/pkg/credentialprovider
 k8s.io/kubernetes/pkg/credentialprovider/aws
 k8s.io/kubernetes/pkg/credentialprovider/azure
@@ -2013,6 +2038,7 @@ k8s.io/kubernetes/pkg/util/goroutinemap
 k8s.io/kubernetes/pkg/util/goroutinemap/exponentialbackoff
 k8s.io/kubernetes/pkg/util/hash
 k8s.io/kubernetes/pkg/util/iptables
+k8s.io/kubernetes/pkg/util/labels
 k8s.io/kubernetes/pkg/util/node
 k8s.io/kubernetes/pkg/util/oom
 k8s.io/kubernetes/pkg/util/parsers
@@ -2051,7 +2077,35 @@ k8s.io/kubernetes/pkg/volume/util/types
 k8s.io/kubernetes/pkg/volume/util/volumepathhandler
 k8s.io/kubernetes/pkg/volume/validation
 k8s.io/kubernetes/pkg/windows/service
+k8s.io/kubernetes/test/e2e/apps
+k8s.io/kubernetes/test/e2e/framework
+k8s.io/kubernetes/test/e2e/framework/auth
+k8s.io/kubernetes/test/e2e/framework/deployment
+k8s.io/kubernetes/test/e2e/framework/ginkgowrapper
+k8s.io/kubernetes/test/e2e/framework/job
+k8s.io/kubernetes/test/e2e/framework/kubectl
+k8s.io/kubernetes/test/e2e/framework/log
+k8s.io/kubernetes/test/e2e/framework/manifest
+k8s.io/kubernetes/test/e2e/framework/metrics
+k8s.io/kubernetes/test/e2e/framework/network
+k8s.io/kubernetes/test/e2e/framework/node
+k8s.io/kubernetes/test/e2e/framework/pod
+k8s.io/kubernetes/test/e2e/framework/pv
+k8s.io/kubernetes/test/e2e/framework/rc
+k8s.io/kubernetes/test/e2e/framework/replicaset
+k8s.io/kubernetes/test/e2e/framework/resource
+k8s.io/kubernetes/test/e2e/framework/service
+k8s.io/kubernetes/test/e2e/framework/skipper
+k8s.io/kubernetes/test/e2e/framework/ssh
+k8s.io/kubernetes/test/e2e/framework/statefulset
+k8s.io/kubernetes/test/e2e/framework/testfiles
+k8s.io/kubernetes/test/e2e/framework/volume
+k8s.io/kubernetes/test/e2e/perftype
 k8s.io/kubernetes/test/e2e/reporters
+k8s.io/kubernetes/test/e2e/storage/podlogs
+k8s.io/kubernetes/test/e2e/storage/utils
+k8s.io/kubernetes/test/utils
+k8s.io/kubernetes/test/utils/image
 k8s.io/kubernetes/third_party/forked/golang/expansion
 # k8s.io/legacy-cloud-providers v0.0.0 => github.com/kubeedge/kubernetes/staging/src/k8s.io/legacy-cloud-providers v1.22.6-kubeedge3
 k8s.io/legacy-cloud-providers/azure/auth
