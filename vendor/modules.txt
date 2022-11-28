@@ -34,6 +34,11 @@ github.com/Azure/go-autorest/logger
 github.com/Azure/go-autorest/tracing
 # github.com/BurntSushi/toml v0.3.1
 github.com/BurntSushi/toml
+# github.com/GoogleCloudPlatform/k8s-cloud-provider v0.0.0-20200415212048-7901bc822317
+github.com/GoogleCloudPlatform/k8s-cloud-provider/pkg/cloud
+github.com/GoogleCloudPlatform/k8s-cloud-provider/pkg/cloud/filter
+github.com/GoogleCloudPlatform/k8s-cloud-provider/pkg/cloud/meta
+github.com/GoogleCloudPlatform/k8s-cloud-provider/pkg/cloud/mock
 # github.com/JeffAshton/win_pdh v0.0.0-20161109143554-76bb4ee9f0ab
 github.com/JeffAshton/win_pdh
 # github.com/MakeNowJust/heredoc v0.0.0-20170808103936-bb23615498cd
@@ -404,6 +409,8 @@ github.com/google/shlex
 # github.com/google/uuid v1.2.0
 ## explicit
 github.com/google/uuid
+# github.com/googleapis/gax-go/v2 v2.0.5
+github.com/googleapis/gax-go/v2
 # github.com/googleapis/gnostic v0.5.5
 github.com/googleapis/gnostic/compiler
 github.com/googleapis/gnostic/extensions
@@ -714,6 +721,26 @@ github.com/vishvananda/netlink
 github.com/vishvananda/netlink/nl
 # github.com/vishvananda/netns v0.0.0-20200728191858-db3c7e526aae
 github.com/vishvananda/netns
+# github.com/vmware/govmomi v0.20.3
+github.com/vmware/govmomi
+github.com/vmware/govmomi/find
+github.com/vmware/govmomi/list
+github.com/vmware/govmomi/nfc
+github.com/vmware/govmomi/object
+github.com/vmware/govmomi/property
+github.com/vmware/govmomi/session
+github.com/vmware/govmomi/task
+github.com/vmware/govmomi/vapi/internal
+github.com/vmware/govmomi/vapi/rest
+github.com/vmware/govmomi/vapi/tags
+github.com/vmware/govmomi/vim25
+github.com/vmware/govmomi/vim25/debug
+github.com/vmware/govmomi/vim25/methods
+github.com/vmware/govmomi/vim25/mo
+github.com/vmware/govmomi/vim25/progress
+github.com/vmware/govmomi/vim25/soap
+github.com/vmware/govmomi/vim25/types
+github.com/vmware/govmomi/vim25/xml
 # github.com/xeipuuv/gojsonpointer v0.0.0-20180127040702-4e3ac2762d5f
 github.com/xeipuuv/gojsonpointer
 # github.com/xeipuuv/gojsonreference v0.0.0-20180127040603-bd5ef7bd5415
@@ -747,8 +774,19 @@ go.etcd.io/etcd/client/v3/internal/resolver
 # go.opencensus.io v0.23.0
 go.opencensus.io
 go.opencensus.io/internal
+go.opencensus.io/internal/tagencoding
+go.opencensus.io/metric/metricdata
+go.opencensus.io/metric/metricproducer
+go.opencensus.io/plugin/ochttp
+go.opencensus.io/plugin/ochttp/propagation/b3
+go.opencensus.io/resource
+go.opencensus.io/stats
+go.opencensus.io/stats/internal
+go.opencensus.io/stats/view
+go.opencensus.io/tag
 go.opencensus.io/trace
 go.opencensus.io/trace/internal
+go.opencensus.io/trace/propagation
 go.opencensus.io/trace/tracestate
 # go.opentelemetry.io/contrib v0.20.0
 go.opentelemetry.io/contrib
@@ -878,7 +916,11 @@ golang.org/x/net/trace
 golang.org/x/net/websocket
 # golang.org/x/oauth2 v0.0.0-20210402161424-2e8d93401602
 golang.org/x/oauth2
+golang.org/x/oauth2/google
+golang.org/x/oauth2/google/internal/externalaccount
 golang.org/x/oauth2/internal
+golang.org/x/oauth2/jws
+golang.org/x/oauth2/jwt
 # golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 golang.org/x/sync/errgroup
 golang.org/x/sync/semaphore
@@ -938,11 +980,32 @@ golang.org/x/xerrors
 golang.org/x/xerrors/internal
 # gomodules.xyz/jsonpatch/v2 v2.2.0
 gomodules.xyz/jsonpatch/v2
+# google.golang.org/api v0.44.0
+google.golang.org/api/compute/v0.alpha
+google.golang.org/api/compute/v0.beta
+google.golang.org/api/compute/v1
+google.golang.org/api/container/v1
+google.golang.org/api/googleapi
+google.golang.org/api/googleapi/transport
+google.golang.org/api/internal
+google.golang.org/api/internal/gensupport
+google.golang.org/api/internal/impersonate
+google.golang.org/api/internal/third_party/uritemplates
+google.golang.org/api/option
+google.golang.org/api/option/internaloption
+google.golang.org/api/tpu/v1
+google.golang.org/api/transport/cert
+google.golang.org/api/transport/http
+google.golang.org/api/transport/http/internal/propagation
+google.golang.org/api/transport/internal/dca
 # google.golang.org/appengine v1.6.7
+google.golang.org/appengine
 google.golang.org/appengine/internal
+google.golang.org/appengine/internal/app_identity
 google.golang.org/appengine/internal/base
 google.golang.org/appengine/internal/datastore
 google.golang.org/appengine/internal/log
+google.golang.org/appengine/internal/modules
 google.golang.org/appengine/internal/remote_api
 google.golang.org/appengine/internal/urlfetch
 google.golang.org/appengine/urlfetch
@@ -1038,16 +1101,28 @@ google.golang.org/protobuf/types/known/durationpb
 google.golang.org/protobuf/types/known/fieldmaskpb
 google.golang.org/protobuf/types/known/timestamppb
 google.golang.org/protobuf/types/known/wrapperspb
+# gopkg.in/gcfg.v1 v1.2.0
+gopkg.in/gcfg.v1
+gopkg.in/gcfg.v1/scanner
+gopkg.in/gcfg.v1/token
+gopkg.in/gcfg.v1/types
 # gopkg.in/gorp.v1 v1.7.2
 gopkg.in/gorp.v1
 # gopkg.in/inf.v0 v0.9.1
 gopkg.in/inf.v0
 # gopkg.in/natefinch/lumberjack.v2 v2.0.0
 gopkg.in/natefinch/lumberjack.v2
+# gopkg.in/square/go-jose.v2 v2.5.1 => gopkg.in/square/go-jose.v2 v2.2.2
+gopkg.in/square/go-jose.v2
+gopkg.in/square/go-jose.v2/cipher
+gopkg.in/square/go-jose.v2/json
+gopkg.in/square/go-jose.v2/jwt
 # gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7
 gopkg.in/tomb.v1
 # gopkg.in/tomb.v2 v2.0.0-20161208151619-d5d1b5820637
 gopkg.in/tomb.v2
+# gopkg.in/warnings.v0 v0.1.1
+gopkg.in/warnings.v0
 # gopkg.in/yaml.v2 v2.4.0
 gopkg.in/yaml.v2
 # gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b
@@ -1633,9 +1708,12 @@ k8s.io/client-go/util/retry
 k8s.io/client-go/util/workqueue
 # k8s.io/cloud-provider v0.22.6 => github.com/kubeedge/kubernetes/staging/src/k8s.io/cloud-provider v1.22.6-kubeedge3
 ## explicit
+k8s.io/cloud-provider
 k8s.io/cloud-provider/credentialconfig
 k8s.io/cloud-provider/service/helpers
+k8s.io/cloud-provider/volume
 k8s.io/cloud-provider/volume/errors
+k8s.io/cloud-provider/volume/helpers
 # k8s.io/cluster-bootstrap v0.22.6 => github.com/kubeedge/kubernetes/staging/src/k8s.io/cluster-bootstrap v1.22.6-kubeedge3
 ## explicit
 k8s.io/cluster-bootstrap/token/api
@@ -1863,9 +1941,11 @@ k8s.io/kubernetes/pkg/apis/storage
 k8s.io/kubernetes/pkg/apis/storage/install
 k8s.io/kubernetes/pkg/apis/storage/util
 k8s.io/kubernetes/pkg/apis/storage/v1
+k8s.io/kubernetes/pkg/apis/storage/v1/util
 k8s.io/kubernetes/pkg/apis/storage/v1alpha1
 k8s.io/kubernetes/pkg/apis/storage/v1beta1
 k8s.io/kubernetes/pkg/capabilities
+k8s.io/kubernetes/pkg/client/conditions
 k8s.io/kubernetes/pkg/cluster/ports
 k8s.io/kubernetes/pkg/controller
 k8s.io/kubernetes/pkg/controller/daemon
@@ -1876,6 +1956,10 @@ k8s.io/kubernetes/pkg/controller/job/metrics
 k8s.io/kubernetes/pkg/controller/replicaset
 k8s.io/kubernetes/pkg/controller/replicaset/metrics
 k8s.io/kubernetes/pkg/controller/replication
+k8s.io/kubernetes/pkg/controller/volume/events
+k8s.io/kubernetes/pkg/controller/volume/persistentvolume/util
+k8s.io/kubernetes/pkg/controller/volume/scheduling
+k8s.io/kubernetes/pkg/controller/volume/scheduling/metrics
 k8s.io/kubernetes/pkg/credentialprovider
 k8s.io/kubernetes/pkg/credentialprovider/aws
 k8s.io/kubernetes/pkg/credentialprovider/azure
@@ -1969,6 +2053,7 @@ k8s.io/kubernetes/pkg/kubelet/prober
 k8s.io/kubernetes/pkg/kubelet/prober/results
 k8s.io/kubernetes/pkg/kubelet/qos
 k8s.io/kubernetes/pkg/kubelet/runtimeclass
+k8s.io/kubernetes/pkg/kubelet/runtimeclass/testing
 k8s.io/kubernetes/pkg/kubelet/secret
 k8s.io/kubernetes/pkg/kubelet/server
 k8s.io/kubernetes/pkg/kubelet/server/metrics
@@ -2027,6 +2112,7 @@ k8s.io/kubernetes/pkg/security/podsecuritypolicy/seccomp
 k8s.io/kubernetes/pkg/security/podsecuritypolicy/sysctl
 k8s.io/kubernetes/pkg/security/podsecuritypolicy/util
 k8s.io/kubernetes/pkg/securitycontext
+k8s.io/kubernetes/pkg/serviceaccount
 k8s.io/kubernetes/pkg/util/async
 k8s.io/kubernetes/pkg/util/bandwidth
 k8s.io/kubernetes/pkg/util/config
@@ -2077,38 +2163,64 @@ k8s.io/kubernetes/pkg/volume/util/types
 k8s.io/kubernetes/pkg/volume/util/volumepathhandler
 k8s.io/kubernetes/pkg/volume/validation
 k8s.io/kubernetes/pkg/windows/service
+k8s.io/kubernetes/plugin/pkg/admission/serviceaccount
 k8s.io/kubernetes/test/e2e/apps
+k8s.io/kubernetes/test/e2e/auth
+k8s.io/kubernetes/test/e2e/common
+k8s.io/kubernetes/test/e2e/common/network
+k8s.io/kubernetes/test/e2e/common/node
+k8s.io/kubernetes/test/e2e/common/storage
 k8s.io/kubernetes/test/e2e/framework
 k8s.io/kubernetes/test/e2e/framework/auth
 k8s.io/kubernetes/test/e2e/framework/deployment
+k8s.io/kubernetes/test/e2e/framework/events
 k8s.io/kubernetes/test/e2e/framework/ginkgowrapper
+k8s.io/kubernetes/test/e2e/framework/gpu
 k8s.io/kubernetes/test/e2e/framework/job
 k8s.io/kubernetes/test/e2e/framework/kubectl
+k8s.io/kubernetes/test/e2e/framework/kubelet
+k8s.io/kubernetes/test/e2e/framework/kubesystem
 k8s.io/kubernetes/test/e2e/framework/log
 k8s.io/kubernetes/test/e2e/framework/manifest
 k8s.io/kubernetes/test/e2e/framework/metrics
 k8s.io/kubernetes/test/e2e/framework/network
 k8s.io/kubernetes/test/e2e/framework/node
+k8s.io/kubernetes/test/e2e/framework/perf
 k8s.io/kubernetes/test/e2e/framework/pod
+k8s.io/kubernetes/test/e2e/framework/providers/gce
 k8s.io/kubernetes/test/e2e/framework/pv
 k8s.io/kubernetes/test/e2e/framework/rc
 k8s.io/kubernetes/test/e2e/framework/replicaset
 k8s.io/kubernetes/test/e2e/framework/resource
+k8s.io/kubernetes/test/e2e/framework/security
 k8s.io/kubernetes/test/e2e/framework/service
 k8s.io/kubernetes/test/e2e/framework/skipper
 k8s.io/kubernetes/test/e2e/framework/ssh
 k8s.io/kubernetes/test/e2e/framework/statefulset
 k8s.io/kubernetes/test/e2e/framework/testfiles
 k8s.io/kubernetes/test/e2e/framework/volume
+k8s.io/kubernetes/test/e2e/framework/websocket
+k8s.io/kubernetes/test/e2e/node
 k8s.io/kubernetes/test/e2e/perftype
 k8s.io/kubernetes/test/e2e/reporters
+k8s.io/kubernetes/test/e2e/scheduling
+k8s.io/kubernetes/test/e2e/storage
+k8s.io/kubernetes/test/e2e/storage/drivers
+k8s.io/kubernetes/test/e2e/storage/drivers/csi-test/driver
+k8s.io/kubernetes/test/e2e/storage/drivers/csi-test/mock/cache
+k8s.io/kubernetes/test/e2e/storage/drivers/csi-test/mock/service
+k8s.io/kubernetes/test/e2e/storage/drivers/proxy
+k8s.io/kubernetes/test/e2e/storage/framework
 k8s.io/kubernetes/test/e2e/storage/podlogs
+k8s.io/kubernetes/test/e2e/storage/testsuites
 k8s.io/kubernetes/test/e2e/storage/utils
+k8s.io/kubernetes/test/e2e/storage/vsphere
 k8s.io/kubernetes/test/utils
 k8s.io/kubernetes/test/utils/image
 k8s.io/kubernetes/third_party/forked/golang/expansion
 # k8s.io/legacy-cloud-providers v0.0.0 => github.com/kubeedge/kubernetes/staging/src/k8s.io/legacy-cloud-providers v1.22.6-kubeedge3
 k8s.io/legacy-cloud-providers/azure/auth
+k8s.io/legacy-cloud-providers/gce
 k8s.io/legacy-cloud-providers/gce/gcpcredential
 # k8s.io/mount-utils v0.22.6 => github.com/kubeedge/kubernetes/staging/src/k8s.io/mount-utils v1.22.6-kubeedge3
 ## explicit
@@ -2299,6 +2411,7 @@ sigs.k8s.io/yaml
 # go.etcd.io/etcd/pkg/v3 => go.etcd.io/etcd/pkg/v3 v3.5.0
 # go.etcd.io/etcd/raft/v3 => go.etcd.io/etcd/raft/v3 v3.5.0
 # go.etcd.io/etcd/server/v3 => go.etcd.io/etcd/server/v3 v3.5.0
+# gopkg.in/square/go-jose.v2 => gopkg.in/square/go-jose.v2 v2.2.2
 # k8s.io/api => github.com/kubeedge/kubernetes/staging/src/k8s.io/api v1.22.6-kubeedge3
 # k8s.io/apiextensions-apiserver => github.com/kubeedge/kubernetes/staging/src/k8s.io/apiextensions-apiserver v1.22.6-kubeedge3
 # k8s.io/apimachinery => github.com/kubeedge/kubernetes/staging/src/k8s.io/apimachinery v1.22.6-kubeedge3
