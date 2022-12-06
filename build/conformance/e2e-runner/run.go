@@ -47,14 +47,19 @@ import (
 const (
 	dryRunEnvKey        = "E2E_DRYRUN"
 	skipEnvKey          = "E2E_SKIP"
+	focusEnvKey         = "E2E_FOCUS"
 	ginkgoEnvKey        = "GINKGO_BIN"
 	testBinEnvKey       = "TEST_BIN"
 	resultsDirEnvKey    = "RESULTS_DIR"
+	reportPrefixEnvKey  = "REPORT_PREFIX"
+	imageUrl            = "IMAGE_URL"
+	testWithDevice      = "TEST_WITH_DEVICE"
 	kubeConfigEnvKey    = "KUBECONFIG"
 	logFileName         = "e2e.log"
 	defaultFocus        = "\\[Conformance\\]"
 	extraArgsEnvKey     = "E2E_EXTRA_ARGS"
 	defaultResultsDir   = "/tmp/results"
+	defaultReportPrefix = "conformance"
 	defaultGinkgoBinary = "/usr/local/bin/ginkgo"
 	defaultTestBinary   = "/usr/local/bin/e2e.test"
 
@@ -136,7 +141,8 @@ func makeCmd(w io.Writer) (*exec.Cmd, error) {
 		ginkgoArgs = append(ginkgoArgs, "--skip="+skipEnvValue)
 	}
 
-	ginkgoArgs = append(ginkgoArgs, "--focus="+defaultFocus)
+	focusEnvValue := getEnvWithDefault(focusEnvKey, defaultFocus)
+	ginkgoArgs = append(ginkgoArgs, "--focus="+focusEnvValue)
 	ginkgoArgs = append(ginkgoArgs, "--noColor=true")
 
 	if len(getEnvWithDefault(dryRunEnvKey, "")) > 0 {
@@ -144,11 +150,12 @@ func makeCmd(w io.Writer) (*exec.Cmd, error) {
 	}
 
 	extraArgs := []string{
-		"--report-dir=" + getEnvWithDefault(resultsDirEnvKey, ""),
+		"--report-dir=" + getEnvWithDefault(resultsDirEnvKey, defaultResultsDir),
+		"--report-prefix=" + getEnvWithDefault(reportPrefixEnvKey, defaultReportPrefix),
 		"--kubeconfig=" + getEnvWithDefault(kubeConfigEnvKey, ""),
-		"--image-url=nginx",
-		"--image-url=nginx",
-		"--test-device=false",
+		"--image-url=" + getEnvWithDefault(imageUrl, "nginx"),
+		"--image-url=" + getEnvWithDefault(imageUrl, "nginx"),
+		"--test-with-device=" + getEnvWithDefault(testWithDevice, "false"),
 	}
 
 	if len(getEnvWithDefault(extraArgsEnvKey, "")) > 0 {
@@ -190,7 +197,6 @@ func skipCommands() ([]string, error) {
 	}
 
 	var skipCommands []string
-	skipCommands = append(skipCommands, "\\[sig-api-machinery\\]")
 	for _, test := range tests {
 		skipCommands = append(skipCommands, test.CodeName)
 	}
