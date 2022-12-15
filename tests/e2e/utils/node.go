@@ -35,9 +35,20 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	clientset "k8s.io/client-go/kubernetes"
+	kubeletpodresourcesv1 "k8s.io/kubelet/pkg/apis/podresources/v1"
+	kubeletpodresourcesv1alpha1 "k8s.io/kubelet/pkg/apis/podresources/v1alpha1"
+	"k8s.io/kubernetes/pkg/kubelet/apis/podresources"
+	"k8s.io/kubernetes/pkg/kubelet/util"
 	"sigs.k8s.io/yaml"
 
 	"github.com/kubeedge/kubeedge/common/constants"
+)
+
+const (
+	// defaultPodResourcesPath is the path to the local endpoint serving the podresources GRPC service.
+	defaultPodResourcesPath    = "/var/lib/kubelet/pod-resources"
+	defaultPodResourcesTimeout = 10 * time.Second
+	defaultPodResourcesMaxSize = 1024 * 1024 * 16 // 16 Mb
 )
 
 func getpwd() string {
@@ -50,7 +61,7 @@ func getpwd() string {
 	return dir
 }
 
-//DeRegisterNodeFromMaster function to deregister the node from master
+// DeRegisterNodeFromMaster function to deregister the node from master
 func DeRegisterNodeFromMaster(nodehandler, nodename string) error {
 	resp, err := SendHTTPRequest(http.MethodDelete, nodehandler+"/"+nodename)
 	if err != nil {
@@ -63,7 +74,7 @@ func DeRegisterNodeFromMaster(nodehandler, nodename string) error {
 	return nil
 }
 
-//GenerateNodeReqBody function to generate the node request body
+// GenerateNodeReqBody function to generate the node request body
 func GenerateNodeReqBody(nodeid, nodeselector string) (map[string]interface{}, error) {
 	var temp map[string]interface{}
 
@@ -77,7 +88,7 @@ func GenerateNodeReqBody(nodeid, nodeselector string) (map[string]interface{}, e
 	return temp, nil
 }
 
-//RegisterNodeToMaster function to register node to master
+// RegisterNodeToMaster function to register node to master
 func RegisterNodeToMaster(UID, nodehandler, nodeselector string) error {
 	body, err := GenerateNodeReqBody(UID, nodeselector)
 	if err != nil {
@@ -117,7 +128,7 @@ func RegisterNodeToMaster(UID, nodehandler, nodeselector string) error {
 	return nil
 }
 
-//CheckNodeReadyStatus function to get node status
+// CheckNodeReadyStatus function to get node status
 func CheckNodeReadyStatus(nodehandler, nodename string) string {
 	var node v1.Node
 	var nodeStatus = "unknown"
@@ -142,7 +153,7 @@ func CheckNodeReadyStatus(nodehandler, nodename string) string {
 	return string(node.Status.Phase)
 }
 
-//CheckNodeDeleteStatus function to check node delete status
+// CheckNodeDeleteStatus function to check node delete status
 func CheckNodeDeleteStatus(nodehandler, nodename string) int {
 	resp, err := SendHTTPRequest(http.MethodGet, nodehandler+"/"+nodename)
 	if err != nil {
@@ -153,7 +164,7 @@ func CheckNodeDeleteStatus(nodehandler, nodename string) int {
 	return resp.StatusCode
 }
 
-//HandleConfigmap function to create configmaps for respective edgenodes
+// HandleConfigmap function to create configmaps for respective edgenodes
 func HandleConfigmap(configName chan error, operation, confighandler string, IsEdgeCore bool) {
 	var req *http.Request
 	var file string
@@ -251,7 +262,11 @@ func TaintEdgeDeployedNode(toTaint bool, taintHandler string) error {
 	return nil
 }
 
-//GetNodes function to get configmaps for respective edgenodes
+func GetNode(c clientset.Interface, name string) (*v1.Node, error) {
+	return c.CoreV1().Nodes().Get(context.TODO(), name, metav1.GetOptions{})
+}
+
+// GetNodes function to get configmaps for respective edgenodes
 func GetNodes(api string) v1.NodeList {
 	var nodes v1.NodeList
 	resp, err := SendHTTPRequest(http.MethodGet, api)
@@ -303,4 +318,42 @@ func ApplyLabelToNode(apiserver, key, val string) error {
 	defer resp.Body.Close()
 	gomega.Expect(resp.StatusCode).Should(gomega.Equal(http.StatusOK))
 	return nil
+}
+
+func GetV1alpha1NodeDevices() (*kubeletpodresourcesv1alpha1.ListPodResourcesResponse, error) {
+	endpoint, err := util.LocalEndpoint(defaultPodResourcesPath, podresources.Socket)
+	if err != nil {
+		return nil, fmt.Errorf("Error getting local endpoint: %v", err)
+	}
+	client, conn, err := podresources.GetV1alpha1Client(endpoint, defaultPodResourcesTimeout, defaultPodResourcesMaxSize)
+	if err != nil {
+		return nil, fmt.Errorf("Error getting grpc client: %v", err)
+	}
+	defer conn.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	resp, err := client.List(ctx, &kubeletpodresourcesv1alpha1.ListPodResourcesRequest{})
+	if err != nil {
+		return nil, fmt.Errorf("%v.Get(_) = _, %v", client, err)
+	}
+	return resp, nil
+}
+
+func GetV1NodeDevices() (*kubeletpodresourcesv1.ListPodResourcesResponse, error) {
+	endpoint, err := util.LocalEndpoint(defaultPodResourcesPath, podresources.Socket)
+	if err != nil {
+		return nil, fmt.Errorf("Error getting local endpoint: %v", err)
+	}
+	client, conn, err := podresources.GetV1Client(endpoint, defaultPodResourcesTimeout, defaultPodResourcesMaxSize)
+	if err != nil {
+		return nil, fmt.Errorf("Error getting gRPC client: %v", err)
+	}
+	defer conn.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	resp, err := client.List(ctx, &kubeletpodresourcesv1.ListPodResourcesRequest{})
+	if err != nil {
+		return nil, fmt.Errorf("%v.Get(_) = _, %v", client, err)
+	}
+	return resp, nil
 }

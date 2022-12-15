@@ -18,6 +18,8 @@ package utils
 
 import (
 	"context"
+	"fmt"
+	"k8s.io/kubectl/pkg/util/podutils"
 	"time"
 
 	"github.com/onsi/gomega"
@@ -33,6 +35,14 @@ import (
 	"k8s.io/klog/v2"
 
 	edgeclientset "github.com/kubeedge/kubeedge/pkg/client/clientset/versioned"
+)
+
+const (
+	// PodStartTimeout is how long to wait for the pod to be started.
+	PodStartTimeout = 5 * time.Minute
+
+	// poll is how often to poll pods and claims.
+	poll = 2 * time.Second
 )
 
 func GetPods(c clientset.Interface, ns string, labelSelector labels.Selector, fieldSelector fields.Selector) (*v1.PodList, error) {
@@ -59,6 +69,18 @@ func DeletePod(c clientset.Interface, ns, name string) error {
 
 func CreatePod(c clientset.Interface, pod *v1.Pod) (*v1.Pod, error) {
 	return c.CoreV1().Pods(pod.Namespace).Create(context.TODO(), pod, metav1.CreateOptions{})
+}
+
+func CreateSync(c clientset.Interface, pod *v1.Pod) *v1.Pod {
+	p, err := c.CoreV1().Pods(pod.Namespace).Create(context.TODO(), pod, metav1.CreateOptions{})
+	ExpectNoError(err, "Error creating Pod")
+
+	ExpectNoError(WaitTimeoutForPodReadyInNamespace(c, p.Name, p.Namespace, PodStartTimeout))
+
+	// Get the newest pod after it becomes running and ready, some status may change after pod created, such as pod ip.
+	p, err = GetPod(c, p.Name, p.Namespace)
+	ExpectNoError(err)
+	return p
 }
 
 func WaitForPodsToDisappear(c clientset.Interface, ns string, label labels.Selector, interval, timeout time.Duration) error {
@@ -139,6 +161,29 @@ func NewKubeEdgeClient(kubeConfigPath string) edgeclientset.Interface {
 		return nil
 	}
 	return edgeClientSet
+}
+
+func podRunningAndReady(c clientset.Interface, podName, namespace string) wait.ConditionFunc {
+	return func() (bool, error) {
+		pod, err := c.CoreV1().Pods(namespace).Get(context.TODO(), podName, metav1.GetOptions{})
+		if err != nil {
+			return false, err
+		}
+		switch pod.Status.Phase {
+		case v1.PodFailed, v1.PodSucceeded:
+			Infof("The status of Pod %s is %s which is unexpected", podName, pod.Status.Phase)
+			return false, fmt.Errorf("pod ran to completion")
+		case v1.PodRunning:
+			Infof("The status of Pod %s is %s (Ready = %v)", podName, pod.Status.Phase, podutils.IsPodReady(pod))
+			return podutils.IsPodReady(pod), nil
+		}
+		Infof("The status of Pod %s is %s, waiting for it to be Running (with Ready = true)", podName, pod.Status.Phase)
+		return false, nil
+	}
+}
+
+func WaitTimeoutForPodReadyInNamespace(c clientset.Interface, podName, namespace string, timeout time.Duration) error {
+	return wait.PollImmediate(poll, timeout, podRunningAndReady(c, podName, namespace))
 }
 
 // WaitForPodsRunning waits util all pods are in running status or timeout
