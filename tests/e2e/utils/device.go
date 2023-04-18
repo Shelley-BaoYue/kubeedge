@@ -1,15 +1,84 @@
 package utils
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
+	"net/http"
+	"reflect"
+	"time"
 
-	v12 "k8s.io/api/core/v1"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	MQTT "github.com/eclipse/paho.mqtt.golang"
+	v1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	apitypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/pointer"
 
 	"github.com/kubeedge/kubeedge/cloud/pkg/devicecontroller/types"
 	"github.com/kubeedge/kubeedge/pkg/apis/devices/v1alpha2"
+	edgeclientset "github.com/kubeedge/kubeedge/pkg/client/clientset/versioned"
 )
+
+const (
+	DeviceETPrefix        = "$hw/events/device/"
+	TwinETUpdateSuffix    = "/twin/update"
+	TwinETGetSuffix       = "/twin/get"
+	TwinETGetResultSuffix = "/twin/get/result"
+
+	BlueTooth         = "bluetooth"
+	ModBus            = "modbus"
+	Led               = "led"
+	IncorrectInstance = "incorrect-instance"
+	Customized        = "customized"
+)
+
+var TwinResult DeviceTwinResult
+var CRDTestTimerGroup = NewTestTimerGroup()
+
+// TwinValue the struct of twin value
+type TwinValue struct {
+	Value    *string        `json:"value,omitempty"`
+	Metadata *ValueMetadata `json:"metadata,omitempty"`
+}
+
+// ValueMetadata the meta of value
+type ValueMetadata struct {
+	Timestamp int64 `json:"timestamp,omitempty"`
+}
+
+// TypeMetadata the meta of value type
+type TypeMetadata struct {
+	Type string `json:"type,omitempty"`
+}
+
+// TwinVersion twin version
+type TwinVersion struct {
+	CloudVersion int64 `json:"cloud"`
+	EdgeVersion  int64 `json:"edge"`
+}
+
+// MsgTwin the struct of device twin
+type MsgTwin struct {
+	Expected        *TwinValue    `json:"expected,omitempty"`
+	Actual          *TwinValue    `json:"actual,omitempty"`
+	Optional        *bool         `json:"optional,omitempty"`
+	Metadata        *TypeMetadata `json:"metadata,omitempty"`
+	ExpectedVersion *TwinVersion  `json:"expected_version,omitempty"`
+	ActualVersion   *TwinVersion  `json:"actual_version,omitempty"`
+}
+
+// DeviceTwinUpdate the struct of device twin update
+type DeviceTwinUpdate struct {
+	BaseMessage
+	Twin map[string]*MsgTwin `json:"twin"`
+}
+
+// DeviceTwinResult device get result
+type DeviceTwinResult struct {
+	BaseMessage
+	Twin map[string]*MsgTwin `json:"twin"`
+}
 
 func NewLedDeviceModel() v1alpha2.DeviceModel {
 	deviceProperty1 := v1alpha2.DeviceProperty{
@@ -30,11 +99,11 @@ func NewLedDeviceModel() v1alpha2.DeviceModel {
 	}
 	properties := []v1alpha2.DeviceProperty{deviceProperty1, deviceProperty2}
 	newDeviceModel := v1alpha2.DeviceModel{
-		TypeMeta: v1.TypeMeta{
+		TypeMeta: metav1.TypeMeta{
 			Kind:       "DeviceModel",
 			APIVersion: "devices.kubeedge.io/v1alpha2",
 		},
-		ObjectMeta: v1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name:      "led-light",
 			Namespace: Namespace,
 		},
@@ -66,11 +135,11 @@ func NewModbusDeviceModel() v1alpha2.DeviceModel {
 	properties := []v1alpha2.DeviceProperty{deviceProperty1, deviceProperty2}
 
 	newDeviceModel := v1alpha2.DeviceModel{
-		TypeMeta: v1.TypeMeta{
+		TypeMeta: metav1.TypeMeta{
 			Kind:       "DeviceModel",
 			APIVersion: "devices.kubeedge.io/v1alpha2",
 		},
-		ObjectMeta: v1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name:      "sensor-tag-model",
 			Namespace: Namespace,
 		},
@@ -133,11 +202,11 @@ func NewBluetoothDeviceModel() v1alpha2.DeviceModel {
 	}
 	properties := []v1alpha2.DeviceProperty{deviceProperty1, deviceProperty2, deviceProperty3, deviceProperty4, deviceProperty5, deviceProperty6}
 	newDeviceModel := v1alpha2.DeviceModel{
-		TypeMeta: v1.TypeMeta{
+		TypeMeta: metav1.TypeMeta{
 			Kind:       "DeviceModel",
 			APIVersion: "devices.kubeedge.io/v1alpha2",
 		},
-		ObjectMeta: v1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name:      "cc2650-sensortag",
 			Namespace: Namespace,
 		},
@@ -168,11 +237,11 @@ func NewCustomizedDeviceModel() v1alpha2.DeviceModel {
 	}
 	properties := []v1alpha2.DeviceProperty{deviceProperty1, deviceProperty2}
 	newDeviceModel := v1alpha2.DeviceModel{
-		TypeMeta: v1.TypeMeta{
+		TypeMeta: metav1.TypeMeta{
 			Kind:       "DeviceModel",
 			APIVersion: "devices.kubeedge.io/v1alpha2",
 		},
-		ObjectMeta: v1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name:      "sensor-tag-customized-model",
 			Namespace: Namespace,
 		},
@@ -202,11 +271,11 @@ func UpdatedLedDeviceModel() v1alpha2.DeviceModel {
 	}
 	properties := []v1alpha2.DeviceProperty{deviceProperty1, deviceProperty2}
 	updatedDeviceModel := v1alpha2.DeviceModel{
-		TypeMeta: v1.TypeMeta{
+		TypeMeta: metav1.TypeMeta{
 			Kind:       "DeviceModel",
 			APIVersion: "devices.kubeedge.io/v1alpha2",
 		},
-		ObjectMeta: v1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name:      "led-light",
 			Namespace: Namespace,
 		},
@@ -237,11 +306,11 @@ func UpdatedModbusDeviceModel() v1alpha2.DeviceModel {
 	}
 	properties := []v1alpha2.DeviceProperty{deviceProperty1, deviceProperty2}
 	newDeviceModel := v1alpha2.DeviceModel{
-		TypeMeta: v1.TypeMeta{
+		TypeMeta: metav1.TypeMeta{
 			Kind:       "DeviceModel",
 			APIVersion: "devices.kubeedge.io/v1alpha2",
 		},
-		ObjectMeta: v1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name:      "sensor-tag-model",
 			Namespace: Namespace,
 		},
@@ -304,11 +373,11 @@ func UpdatedBluetoothDeviceModel() v1alpha2.DeviceModel {
 	}
 	properties := []v1alpha2.DeviceProperty{deviceProperty1, deviceProperty2, deviceProperty3, deviceProperty4, deviceProperty5, deviceProperty6}
 	newDeviceModel := v1alpha2.DeviceModel{
-		TypeMeta: v1.TypeMeta{
+		TypeMeta: metav1.TypeMeta{
 			Kind:       "DeviceModel",
 			APIVersion: "devices.kubeedge.io/v1alpha2",
 		},
-		ObjectMeta: v1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name:      "cc2650-sensortag",
 			Namespace: Namespace,
 		},
@@ -321,11 +390,11 @@ func UpdatedBluetoothDeviceModel() v1alpha2.DeviceModel {
 
 func NewLedDeviceInstance(nodeSelector string) v1alpha2.Device {
 	deviceInstance := v1alpha2.Device{
-		TypeMeta: v1.TypeMeta{
+		TypeMeta: metav1.TypeMeta{
 			Kind:       "Device",
 			APIVersion: "devices.kubeedge.io/v1alpha2",
 		},
-		ObjectMeta: v1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name:      "led-light-instance-01",
 			Namespace: Namespace,
 			Labels: map[string]string{
@@ -334,16 +403,16 @@ func NewLedDeviceInstance(nodeSelector string) v1alpha2.Device {
 			},
 		},
 		Spec: v1alpha2.DeviceSpec{
-			DeviceModelRef: &v12.LocalObjectReference{
+			DeviceModelRef: &v1.LocalObjectReference{
 				Name: "led-light",
 			},
-			NodeSelector: &v12.NodeSelector{
-				NodeSelectorTerms: []v12.NodeSelectorTerm{
+			NodeSelector: &v1.NodeSelector{
+				NodeSelectorTerms: []v1.NodeSelectorTerm{
 					{
-						MatchExpressions: []v12.NodeSelectorRequirement{
+						MatchExpressions: []v1.NodeSelectorRequirement{
 							{
 								Key:      "",
-								Operator: v12.NodeSelectorOpIn,
+								Operator: v1.NodeSelectorOpIn,
 								Values:   []string{nodeSelector},
 							},
 						},
@@ -375,11 +444,11 @@ func NewLedDeviceInstance(nodeSelector string) v1alpha2.Device {
 // NewMockInstance create an instance for mock bluetooth device.
 func NewMockInstance(nodeSelector string) v1alpha2.Device {
 	deviceInstance := v1alpha2.Device{
-		TypeMeta: v1.TypeMeta{
+		TypeMeta: metav1.TypeMeta{
 			Kind:       "Device",
 			APIVersion: "devices.kubeedge.io/v1alpha2",
 		},
-		ObjectMeta: v1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name:      "mock-temp-sensor-instance",
 			Namespace: Namespace,
 			Labels: map[string]string{
@@ -389,16 +458,16 @@ func NewMockInstance(nodeSelector string) v1alpha2.Device {
 			},
 		},
 		Spec: v1alpha2.DeviceSpec{
-			DeviceModelRef: &v12.LocalObjectReference{
+			DeviceModelRef: &v1.LocalObjectReference{
 				Name: "mock-temp-sensor-model",
 			},
-			NodeSelector: &v12.NodeSelector{
-				NodeSelectorTerms: []v12.NodeSelectorTerm{
+			NodeSelector: &v1.NodeSelector{
+				NodeSelectorTerms: []v1.NodeSelectorTerm{
 					{
-						MatchExpressions: []v12.NodeSelectorRequirement{
+						MatchExpressions: []v1.NodeSelectorRequirement{
 							{
 								Key:      "",
-								Operator: v12.NodeSelectorOpIn,
+								Operator: v1.NodeSelectorOpIn,
 								Values:   []string{nodeSelector},
 							},
 						},
@@ -456,11 +525,11 @@ func NewModbusDeviceInstance(nodeSelector string) v1alpha2.Device {
 	propertyVisitors := []v1alpha2.DevicePropertyVisitor{devicePropertyVisitor1, devicePropertyVisitor2}
 
 	deviceInstance := v1alpha2.Device{
-		TypeMeta: v1.TypeMeta{
+		TypeMeta: metav1.TypeMeta{
 			Kind:       "Device",
 			APIVersion: "devices.kubeedge.io/v1alpha2",
 		},
-		ObjectMeta: v1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name:      "sensor-tag-instance-02",
 			Namespace: Namespace,
 			Labels: map[string]string{
@@ -470,16 +539,16 @@ func NewModbusDeviceInstance(nodeSelector string) v1alpha2.Device {
 			},
 		},
 		Spec: v1alpha2.DeviceSpec{
-			DeviceModelRef: &v12.LocalObjectReference{
+			DeviceModelRef: &v1.LocalObjectReference{
 				Name: "sensor-tag-model",
 			},
-			NodeSelector: &v12.NodeSelector{
-				NodeSelectorTerms: []v12.NodeSelectorTerm{
+			NodeSelector: &v1.NodeSelector{
+				NodeSelectorTerms: []v1.NodeSelectorTerm{
 					{
-						MatchExpressions: []v12.NodeSelectorRequirement{
+						MatchExpressions: []v1.NodeSelectorRequirement{
 							{
 								Key:      "",
-								Operator: v12.NodeSelectorOpIn,
+								Operator: v1.NodeSelectorOpIn,
 								Values:   []string{nodeSelector},
 							},
 						},
@@ -604,11 +673,11 @@ func NewBluetoothDeviceInstance(nodeSelector string) v1alpha2.Device {
 	propertyVisitors := []v1alpha2.DevicePropertyVisitor{devicePropertyVisitor1, devicePropertyVisitor2, devicePropertyVisitor3, devicePropertyVisitor4, devicePropertyVisitor5, devicePropertyVisitor6}
 
 	deviceInstance := v1alpha2.Device{
-		TypeMeta: v1.TypeMeta{
+		TypeMeta: metav1.TypeMeta{
 			Kind:       "Device",
 			APIVersion: "devices.kubeedge.io/v1alpha2",
 		},
-		ObjectMeta: v1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name:      "sensor-tag-instance-01",
 			Namespace: Namespace,
 			Labels: map[string]string{
@@ -618,16 +687,16 @@ func NewBluetoothDeviceInstance(nodeSelector string) v1alpha2.Device {
 			},
 		},
 		Spec: v1alpha2.DeviceSpec{
-			DeviceModelRef: &v12.LocalObjectReference{
+			DeviceModelRef: &v1.LocalObjectReference{
 				Name: "cc2650-sensortag",
 			},
-			NodeSelector: &v12.NodeSelector{
-				NodeSelectorTerms: []v12.NodeSelectorTerm{
+			NodeSelector: &v1.NodeSelector{
+				NodeSelectorTerms: []v1.NodeSelectorTerm{
 					{
-						MatchExpressions: []v12.NodeSelectorRequirement{
+						MatchExpressions: []v1.NodeSelectorRequirement{
 							{
 								Key:      "",
-								Operator: v12.NodeSelectorOpIn,
+								Operator: v1.NodeSelectorOpIn,
 								Values:   []string{nodeSelector},
 							},
 						},
@@ -692,11 +761,11 @@ func NewCustomizedDeviceInstance(nodeSelector string) v1alpha2.Device {
 	}
 	propertyVisitors := []v1alpha2.DevicePropertyVisitor{devicePropertyVisitor1, devicePropertyVisitor2}
 	deviceInstance := v1alpha2.Device{
-		TypeMeta: v1.TypeMeta{
+		TypeMeta: metav1.TypeMeta{
 			Kind:       "Device",
 			APIVersion: "devices.kubeedge.io/v1alpha2",
 		},
-		ObjectMeta: v1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name:      "sensor-tag-customized-instance-01",
 			Namespace: Namespace,
 			Labels: map[string]string{
@@ -706,16 +775,16 @@ func NewCustomizedDeviceInstance(nodeSelector string) v1alpha2.Device {
 			},
 		},
 		Spec: v1alpha2.DeviceSpec{
-			DeviceModelRef: &v12.LocalObjectReference{
+			DeviceModelRef: &v1.LocalObjectReference{
 				Name: "sensor-tag-customized-model",
 			},
-			NodeSelector: &v12.NodeSelector{
-				NodeSelectorTerms: []v12.NodeSelectorTerm{
+			NodeSelector: &v1.NodeSelector{
+				NodeSelectorTerms: []v1.NodeSelectorTerm{
 					{
-						MatchExpressions: []v12.NodeSelectorRequirement{
+						MatchExpressions: []v1.NodeSelectorRequirement{
 							{
 								Key:      "",
-								Operator: v12.NodeSelectorOpIn,
+								Operator: v1.NodeSelectorOpIn,
 								Values:   []string{nodeSelector},
 							},
 						},
@@ -766,11 +835,11 @@ func NewCustomizedDeviceInstance(nodeSelector string) v1alpha2.Device {
 
 func UpdatedLedDeviceInstance(nodeSelector string) v1alpha2.Device {
 	deviceInstance := v1alpha2.Device{
-		TypeMeta: v1.TypeMeta{
+		TypeMeta: metav1.TypeMeta{
 			Kind:       "Device",
 			APIVersion: "devices.kubeedge.io/v1alpha2",
 		},
-		ObjectMeta: v1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name:      "led-light-instance-01",
 			Namespace: Namespace,
 			Labels: map[string]string{
@@ -779,16 +848,16 @@ func UpdatedLedDeviceInstance(nodeSelector string) v1alpha2.Device {
 			},
 		},
 		Spec: v1alpha2.DeviceSpec{
-			DeviceModelRef: &v12.LocalObjectReference{
+			DeviceModelRef: &v1.LocalObjectReference{
 				Name: "led-light",
 			},
-			NodeSelector: &v12.NodeSelector{
-				NodeSelectorTerms: []v12.NodeSelectorTerm{
+			NodeSelector: &v1.NodeSelector{
+				NodeSelectorTerms: []v1.NodeSelectorTerm{
 					{
-						MatchExpressions: []v12.NodeSelectorRequirement{
+						MatchExpressions: []v1.NodeSelectorRequirement{
 							{
 								Key:      "",
-								Operator: v12.NodeSelectorOpIn,
+								Operator: v1.NodeSelectorOpIn,
 								Values:   []string{nodeSelector},
 							},
 						},
@@ -845,11 +914,11 @@ func UpdatedModbusDeviceInstance(nodeSelector string) v1alpha2.Device {
 	}
 	propertyVisitors := []v1alpha2.DevicePropertyVisitor{devicePropertyVisitor1, devicePropertyVisitor2}
 	deviceInstance := v1alpha2.Device{
-		TypeMeta: v1.TypeMeta{
+		TypeMeta: metav1.TypeMeta{
 			Kind:       "Device",
 			APIVersion: "devices.kubeedge.io/v1alpha2",
 		},
-		ObjectMeta: v1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name:      "sensor-tag-instance-02",
 			Namespace: Namespace,
 			Labels: map[string]string{
@@ -859,16 +928,16 @@ func UpdatedModbusDeviceInstance(nodeSelector string) v1alpha2.Device {
 			},
 		},
 		Spec: v1alpha2.DeviceSpec{
-			DeviceModelRef: &v12.LocalObjectReference{
+			DeviceModelRef: &v1.LocalObjectReference{
 				Name: "sensor-tag-model",
 			},
-			NodeSelector: &v12.NodeSelector{
-				NodeSelectorTerms: []v12.NodeSelectorTerm{
+			NodeSelector: &v1.NodeSelector{
+				NodeSelectorTerms: []v1.NodeSelectorTerm{
 					{
-						MatchExpressions: []v12.NodeSelectorRequirement{
+						MatchExpressions: []v1.NodeSelectorRequirement{
 							{
 								Key:      "",
-								Operator: v12.NodeSelectorOpIn,
+								Operator: v1.NodeSelectorOpIn,
 								Values:   []string{nodeSelector},
 							},
 						},
@@ -1017,11 +1086,11 @@ func UpdatedBluetoothDeviceInstance(nodeSelector string) v1alpha2.Device {
 	}
 	propertyVisitors := []v1alpha2.DevicePropertyVisitor{devicePropertyVisitor1, devicePropertyVisitor2, devicePropertyVisitor3, devicePropertyVisitor4, devicePropertyVisitor5, devicePropertyVisitor6}
 	deviceInstance := v1alpha2.Device{
-		TypeMeta: v1.TypeMeta{
+		TypeMeta: metav1.TypeMeta{
 			Kind:       "Device",
 			APIVersion: "devices.kubeedge.io/v1alpha2",
 		},
-		ObjectMeta: v1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name:      "sensor-tag-instance-01",
 			Namespace: Namespace,
 			Labels: map[string]string{
@@ -1031,16 +1100,16 @@ func UpdatedBluetoothDeviceInstance(nodeSelector string) v1alpha2.Device {
 			},
 		},
 		Spec: v1alpha2.DeviceSpec{
-			DeviceModelRef: &v12.LocalObjectReference{
+			DeviceModelRef: &v1.LocalObjectReference{
 				Name: "cc2650-sensortag",
 			},
-			NodeSelector: &v12.NodeSelector{
-				NodeSelectorTerms: []v12.NodeSelectorTerm{
+			NodeSelector: &v1.NodeSelector{
+				NodeSelectorTerms: []v1.NodeSelectorTerm{
 					{
-						MatchExpressions: []v12.NodeSelectorRequirement{
+						MatchExpressions: []v1.NodeSelectorRequirement{
 							{
 								Key:      "",
-								Operator: v12.NodeSelectorOpIn,
+								Operator: v1.NodeSelectorOpIn,
 								Values:   []string{nodeSelector},
 							},
 						},
@@ -1076,11 +1145,11 @@ func UpdatedBluetoothDeviceInstance(nodeSelector string) v1alpha2.Device {
 
 func IncorrectDeviceModel() v1alpha2.DeviceModel {
 	newDeviceModel := v1alpha2.DeviceModel{
-		TypeMeta: v1.TypeMeta{
+		TypeMeta: metav1.TypeMeta{
 			Kind:       "device-model",
 			APIVersion: "devices.kubeedge.io/v1alpha2",
 		},
-		ObjectMeta: v1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name:      "led-light",
 			Namespace: Namespace,
 		},
@@ -1090,11 +1159,11 @@ func IncorrectDeviceModel() v1alpha2.DeviceModel {
 
 func IncorrectDeviceInstance() v1alpha2.Device {
 	deviceInstance := v1alpha2.Device{
-		TypeMeta: v1.TypeMeta{
+		TypeMeta: metav1.TypeMeta{
 			Kind:       "device",
 			APIVersion: "devices.kubeedge.io/v1alpha2",
 		},
-		ObjectMeta: v1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name:      "led-light-instance-01",
 			Namespace: Namespace,
 			Labels: map[string]string{
@@ -1106,13 +1175,13 @@ func IncorrectDeviceInstance() v1alpha2.Device {
 	return deviceInstance
 }
 
-func NewConfigMapLED(nodeSelector string) v12.ConfigMap {
-	configMap := v12.ConfigMap{
-		TypeMeta: v1.TypeMeta{
+func NewConfigMapLED(nodeSelector string) v1.ConfigMap {
+	configMap := v1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{
 			Kind:       "ConfigMap",
 			APIVersion: "v1",
 		},
-		ObjectMeta: v1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name:      "device-profile-config-" + nodeSelector,
 			Namespace: Namespace,
 		},
@@ -1179,13 +1248,13 @@ func NewConfigMapLED(nodeSelector string) v12.ConfigMap {
 	return configMap
 }
 
-func NewConfigMapBluetooth(nodeSelector string) v12.ConfigMap {
-	configMap := v12.ConfigMap{
-		TypeMeta: v1.TypeMeta{
+func NewConfigMapBluetooth(nodeSelector string) v1.ConfigMap {
+	configMap := v1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{
 			Kind:       "ConfigMap",
 			APIVersion: "v1",
 		},
-		ObjectMeta: v1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name:      "device-profile-config-" + nodeSelector,
 			Namespace: Namespace,
 		},
@@ -1394,13 +1463,13 @@ func NewConfigMapBluetooth(nodeSelector string) v12.ConfigMap {
 	return configMap
 }
 
-func NewConfigMapModbus(nodeSelector string) v12.ConfigMap {
-	configMap := v12.ConfigMap{
-		TypeMeta: v1.TypeMeta{
+func NewConfigMapModbus(nodeSelector string) v1.ConfigMap {
+	configMap := v1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{
 			Kind:       "ConfigMap",
 			APIVersion: "v1",
 		},
-		ObjectMeta: v1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name:      "device-profile-config-" + nodeSelector,
 			Namespace: Namespace,
 		},
@@ -1500,13 +1569,13 @@ func NewConfigMapModbus(nodeSelector string) v12.ConfigMap {
 	return configMap
 }
 
-func UpdatedConfigMapModbusForDataAndTwins(nodeSelector string) v12.ConfigMap {
-	configMap := v12.ConfigMap{
-		TypeMeta: v1.TypeMeta{
+func UpdatedConfigMapModbusForDataAndTwins(nodeSelector string) v1.ConfigMap {
+	configMap := v1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{
 			Kind:       "ConfigMap",
 			APIVersion: "v1",
 		},
-		ObjectMeta: v1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name:      "device-profile-config-" + nodeSelector,
 			Namespace: Namespace,
 		},
@@ -1631,13 +1700,13 @@ func UpdatedConfigMapModbusForDataAndTwins(nodeSelector string) v12.ConfigMap {
 	return configMap
 }
 
-func NewConfigMapCustomized(nodeSelector string) v12.ConfigMap {
-	configMap := v12.ConfigMap{
-		TypeMeta: v1.TypeMeta{
+func NewConfigMapCustomized(nodeSelector string) v1.ConfigMap {
+	configMap := v1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{
 			Kind:       "ConfigMap",
 			APIVersion: "v1",
 		},
-		ObjectMeta: v1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name:      "device-profile-config-" + nodeSelector,
 			Namespace: Namespace,
 		},
@@ -1759,4 +1828,278 @@ func NewConfigMapCustomized(nodeSelector string) v12.ConfigMap {
 	configMap.Data["deviceProfile.json"] = string(bytes)
 
 	return configMap
+}
+
+// HandleDeviceModel to handle DeviceModel operation to apiserver.
+func HandleDeviceModel(c edgeclientset.Interface, operation string, UID string, protocolType string) error {
+	switch operation {
+	case http.MethodPost:
+		body := newDeviceModelObject(protocolType, false)
+		_, err := c.DevicesV1alpha2().DeviceModels("default").Create(context.TODO(), body, metav1.CreateOptions{})
+		return err
+
+	case http.MethodPatch:
+		body := newDeviceModelObject(protocolType, true)
+		reqBytes, err := json.Marshal(body)
+		if err != nil {
+			Fatalf("Marshalling body failed: %v", err)
+		}
+
+		_, err = c.DevicesV1alpha2().DeviceModels("default").Patch(context.TODO(), UID, apitypes.MergePatchType, reqBytes, metav1.PatchOptions{})
+		return err
+
+	case http.MethodDelete:
+		err := c.DevicesV1alpha2().DeviceModels("default").Delete(context.TODO(), UID, metav1.DeleteOptions{})
+		if err != nil && apierrors.IsNotFound(err) {
+			return nil
+		}
+		return err
+	}
+
+	return nil
+}
+
+// HandleDeviceInstance to handle app deployment/delete using pod spec.
+func HandleDeviceInstance(c edgeclientset.Interface, operation string, nodeSelector string, UID string, protocolType string) error {
+	switch operation {
+	case http.MethodPost:
+		body := newDeviceInstanceObject(nodeSelector, protocolType, false)
+		_, err := c.DevicesV1alpha2().Devices("default").Create(context.TODO(), body, metav1.CreateOptions{})
+		return err
+
+	case http.MethodPatch:
+		body := newDeviceInstanceObject(nodeSelector, protocolType, true)
+		reqBytes, err := json.Marshal(body)
+		if err != nil {
+			Fatalf("Marshalling body failed: %v", err)
+		}
+
+		_, err = c.DevicesV1alpha2().Devices("default").Patch(context.TODO(), UID, apitypes.MergePatchType, reqBytes, metav1.PatchOptions{})
+		return err
+
+	case http.MethodDelete:
+		err := c.DevicesV1alpha2().Devices("default").Delete(context.TODO(), UID, metav1.DeleteOptions{})
+		if err != nil && apierrors.IsNotFound(err) {
+			return nil
+		}
+		return err
+	}
+
+	return nil
+}
+
+// newDeviceInstanceObject creates a new device instance object
+func newDeviceInstanceObject(nodeSelector string, protocolType string, updated bool) *v1alpha2.Device {
+	var deviceInstance v1alpha2.Device
+	if !updated {
+		switch protocolType {
+		case BlueTooth:
+			deviceInstance = NewBluetoothDeviceInstance(nodeSelector)
+		case ModBus:
+			deviceInstance = NewModbusDeviceInstance(nodeSelector)
+		case Led:
+			deviceInstance = NewLedDeviceInstance(nodeSelector)
+		case Customized:
+			deviceInstance = NewCustomizedDeviceInstance(nodeSelector)
+		case IncorrectInstance:
+			deviceInstance = IncorrectDeviceInstance()
+		}
+	} else {
+		switch protocolType {
+		case BlueTooth:
+			deviceInstance = UpdatedBluetoothDeviceInstance(nodeSelector)
+		case ModBus:
+			deviceInstance = UpdatedModbusDeviceInstance(nodeSelector)
+		case Led:
+			deviceInstance = UpdatedLedDeviceInstance(nodeSelector)
+		case IncorrectInstance:
+			deviceInstance = IncorrectDeviceInstance()
+		}
+	}
+	return &deviceInstance
+}
+
+// newDeviceModelObject creates a new device model object
+func newDeviceModelObject(protocolType string, updated bool) *v1alpha2.DeviceModel {
+	var deviceModel v1alpha2.DeviceModel
+	if !updated {
+		switch protocolType {
+		case BlueTooth:
+			deviceModel = NewBluetoothDeviceModel()
+		case ModBus:
+			deviceModel = NewModbusDeviceModel()
+		case Led:
+			deviceModel = NewLedDeviceModel()
+		case Customized:
+			deviceModel = NewCustomizedDeviceModel()
+		case "incorrect-model":
+			deviceModel = IncorrectDeviceModel()
+		}
+	} else {
+		switch protocolType {
+		case BlueTooth:
+			deviceModel = UpdatedBluetoothDeviceModel()
+		case ModBus:
+			deviceModel = UpdatedModbusDeviceModel()
+		case Led:
+			deviceModel = UpdatedLedDeviceModel()
+		case "incorrect-model":
+			deviceModel = IncorrectDeviceModel()
+		}
+	}
+	return &deviceModel
+}
+
+func ListDeviceModel(c edgeclientset.Interface, ns string) ([]v1alpha2.DeviceModel, error) {
+	deviceModelList, err := c.DevicesV1alpha2().DeviceModels(ns).List(context.TODO(), metav1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+	return deviceModelList.Items, nil
+}
+
+func ListDevice(c edgeclientset.Interface, ns string) ([]v1alpha2.Device, error) {
+	deviceList, err := c.DevicesV1alpha2().Devices(ns).List(context.TODO(), metav1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+	return deviceList.Items, nil
+}
+
+// CheckDeviceModelExists verify whether the contents of the device model matches with what is expected
+func CheckDeviceModelExists(deviceModels []v1alpha2.DeviceModel, expectedDeviceModel *v1alpha2.DeviceModel) error {
+	modelExists := false
+	for _, deviceModel := range deviceModels {
+		if expectedDeviceModel.ObjectMeta.Name == deviceModel.ObjectMeta.Name {
+			modelExists = true
+			if !reflect.DeepEqual(expectedDeviceModel.TypeMeta, deviceModel.TypeMeta) ||
+				expectedDeviceModel.ObjectMeta.Namespace != deviceModel.ObjectMeta.Namespace ||
+				!reflect.DeepEqual(expectedDeviceModel.Spec, deviceModel.Spec) {
+				return fmt.Errorf("the device model is not matching with what was expected")
+			}
+			break
+		}
+	}
+	if !modelExists {
+		return fmt.Errorf("the requested device model is not found")
+	}
+
+	return nil
+}
+
+func CheckDeviceExists(deviceList []v1alpha2.Device, expectedDevice *v1alpha2.Device) error {
+	deviceExists := false
+	for _, device := range deviceList {
+		if expectedDevice.ObjectMeta.Name == device.ObjectMeta.Name {
+			deviceExists = true
+			if !reflect.DeepEqual(expectedDevice.TypeMeta, device.TypeMeta) ||
+				expectedDevice.ObjectMeta.Namespace != device.ObjectMeta.Namespace ||
+				!reflect.DeepEqual(expectedDevice.ObjectMeta.Labels, device.ObjectMeta.Labels) ||
+				!reflect.DeepEqual(expectedDevice.Spec, device.Spec) {
+				return fmt.Errorf("the device is not matching with what was expected")
+			}
+			twinExists := false
+			for _, expectedTwin := range expectedDevice.Status.Twins {
+				for _, twin := range device.Status.Twins {
+					if expectedTwin.PropertyName == twin.PropertyName {
+						twinExists = true
+						if !reflect.DeepEqual(expectedTwin.Desired, twin.Desired) {
+							return fmt.Errorf("Status twin " + twin.PropertyName + " not as expected")
+						}
+						break
+					}
+				}
+			}
+			if !twinExists {
+				return fmt.Errorf("status twin(s) not found")
+			}
+			break
+		}
+	}
+
+	if !deviceExists {
+		return fmt.Errorf("the requested device is not found")
+	}
+
+	return nil
+}
+
+// ChangeTwinValue sends the updated twin value to the edge through the MQTT broker
+func ChangeTwinValue(updateMessage DeviceTwinUpdate, deviceID string) error {
+	twinUpdateBody, err := json.Marshal(updateMessage)
+	if err != nil {
+		return fmt.Errorf("Error in marshalling: %s" + err.Error())
+	}
+	deviceTwinUpdate := DeviceETPrefix + deviceID + TwinETUpdateSuffix
+	TokenClient = Client.Publish(deviceTwinUpdate, 0, false, twinUpdateBody)
+	if TokenClient.Wait() && TokenClient.Error() != nil {
+		return fmt.Errorf("client.publish() Error in device twin update is %s" + TokenClient.Error().Error())
+	}
+	return nil
+}
+
+// GetTwin function is used to get the device twin details from the edge
+func GetTwin(updateMessage DeviceTwinUpdate, deviceID string) error {
+	getTwin := DeviceETPrefix + deviceID + TwinETGetSuffix
+	twinUpdateBody, err := json.Marshal(updateMessage)
+	if err != nil {
+		return fmt.Errorf("Error in marshalling: %s" + err.Error())
+	}
+	TokenClient = Client.Publish(getTwin, 0, false, twinUpdateBody)
+	if TokenClient.Wait() && TokenClient.Error() != nil {
+		return fmt.Errorf("client.publish() Error in device twin get  is: %s " + TokenClient.Error().Error())
+	}
+	return nil
+}
+
+// subscribe function subscribes  the device twin information through the MQTT broker
+func TwinSubscribe(deviceID string) {
+	getTwinResult := DeviceETPrefix + deviceID + TwinETGetResultSuffix
+	TokenClient = Client.Subscribe(getTwinResult, 0, OnTwinMessageReceived)
+	if TokenClient.Wait() && TokenClient.Error() != nil {
+		Errorf("subscribe() Error in device twin result get  is %v", TokenClient.Error().Error())
+	}
+	for {
+		twin := DeviceTwinUpdate{}
+		err := GetTwin(twin, deviceID)
+		if err != nil {
+			Errorf("Error in getting device twin: %v", err.Error())
+		}
+		time.Sleep(1 * time.Second)
+		if TwinResult.Twin != nil {
+			break
+		}
+	}
+}
+
+// OnTwinMessageReceived callback function which is called when message is received
+func OnTwinMessageReceived(client MQTT.Client, message MQTT.Message) {
+	err := json.Unmarshal(message.Payload(), &TwinResult)
+	if err != nil {
+		Errorf("Error in unmarshalling: %v", err.Error())
+	}
+}
+
+// CompareDeviceProfileInConfigMaps is used to compare 2 device profile in config maps
+func CompareDeviceProfileInConfigMaps(configMap, expectedConfigMap v1.ConfigMap) bool {
+	deviceProfile := configMap.Data["deviceProfile.json"]
+	ExpectedDeviceProfile := expectedConfigMap.Data["deviceProfile.json"]
+	var deviceProfileMap, expectedDeviceProfileMap map[string]interface{}
+	_ = json.Unmarshal([]byte(deviceProfile), &deviceProfileMap)
+	_ = json.Unmarshal([]byte(ExpectedDeviceProfile), &expectedDeviceProfileMap)
+	return reflect.DeepEqual(expectedConfigMap.TypeMeta, configMap.TypeMeta)
+}
+
+// CompareTwin is used to compare 2 device Twins
+func CompareTwin(deviceTwin map[string]*MsgTwin, expectedDeviceTwin map[string]*MsgTwin) bool {
+	for key := range expectedDeviceTwin {
+		if deviceTwin[key].Metadata != nil && deviceTwin[key].Expected.Value != nil {
+			if *deviceTwin[key].Metadata != *expectedDeviceTwin[key].Metadata || *deviceTwin[key].Expected.Value != *expectedDeviceTwin[key].Expected.Value {
+				return false
+			}
+		} else {
+			return false
+		}
+	}
+	return true
 }

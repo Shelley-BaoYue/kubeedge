@@ -23,7 +23,7 @@ import (
 	cliflag "k8s.io/component-base/cli/flag"
 )
 
-//config.json decode struct
+// Config config.json decode struct
 type Config struct {
 	AppImageURL                    []string `json:"image_url"`
 	K8SMasterForKubeEdge           string   `json:"k8smasterforkubeedge"`
@@ -51,12 +51,12 @@ func CopyFlags(source *flag.FlagSet, target *flag.FlagSet) {
 	})
 }
 
-// get config.json path
+// LoadConfig get config.json path
 func LoadConfig() Config {
 	return config
 }
 
-// function to Generate Random string
+// GetRandomString function to Generate Random string
 func GetRandomString(length int) string {
 	str := "0123456789abcdefghijklmnopqrstuvwxyz"
 	bytes := []byte(str)

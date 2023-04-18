@@ -18,6 +18,10 @@ package utils
 
 import (
 	"context"
+	"fmt"
+	"k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/apimachinery/pkg/util/uuid"
+	"k8s.io/kubectl/pkg/util/podutils"
 	"time"
 
 	"github.com/onsi/gomega"
@@ -29,10 +33,18 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
-	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog/v2"
+)
 
-	edgeclientset "github.com/kubeedge/kubeedge/pkg/client/clientset/versioned"
+const (
+	// sampleResourceName is the name of the example resource which is used in the e2e test
+	sampleResourceName = "example.com/resource"
+	// sampleDevicePluginName is the name of the device plugin pod
+	sampleDevicePluginName = "sample-device-plugin"
+
+	// fake resource name
+	resourceName            = "example.com/resource"
+	envVarNamePluginSockDir = "PLUGIN_SOCK_DIR"
 )
 
 func GetPods(c clientset.Interface, ns string, labelSelector labels.Selector, fieldSelector fields.Selector) (*v1.PodList, error) {
@@ -106,41 +118,6 @@ func CheckPodDeleteState(c clientset.Interface, podList *v1.PodList) {
 	}, "240s", "4s").Should(gomega.Equal(podCount), errInfo)
 }
 
-// NewKubeClient creates kube client from config
-func NewKubeClient(kubeConfigPath string) clientset.Interface {
-	kubeConfig, err := clientcmd.BuildConfigFromFlags("", kubeConfigPath)
-	if err != nil {
-		Fatalf("Get kube config failed with error: %v", err)
-		return nil
-	}
-	kubeConfig.QPS = 5
-	kubeConfig.Burst = 10
-	kubeConfig.ContentType = "application/vnd.kubernetes.protobuf"
-	kubeClient, err := clientset.NewForConfig(kubeConfig)
-	if err != nil {
-		Fatalf("Get kube client failed with error: %v", err)
-		return nil
-	}
-	return kubeClient
-}
-
-// NewKubeEdgeClient creates kubeEdge CRD client from config
-func NewKubeEdgeClient(kubeConfigPath string) edgeclientset.Interface {
-	kubeConfig, err := clientcmd.BuildConfigFromFlags("", kubeConfigPath)
-	if err != nil {
-		Fatalf("Get kube config failed with error: %v", err)
-		return nil
-	}
-	kubeConfig.QPS = 5
-	kubeConfig.Burst = 10
-	edgeClientSet, err := edgeclientset.NewForConfig(kubeConfig)
-	if err != nil {
-		Fatalf("Get kubeEdge client failed with error: %v", err)
-		return nil
-	}
-	return edgeClientSet
-}
-
 // WaitForPodsRunning waits util all pods are in running status or timeout
 func WaitForPodsRunning(c clientset.Interface, podList *v1.PodList, timeout time.Duration) {
 	if len(podList.Items) == 0 {
@@ -210,4 +187,144 @@ func WaitForPodsRunning(c clientset.Interface, podList *v1.PodList, timeout time
 	case <-time.After(timeout):
 		Fatalf("Wait for pods come into running status timeout: %v", timeout)
 	}
+}
+
+// CreateSync creates a new pod according to the framework specifications, and wait for it to start and be running and ready.
+func CreateSync(c clientset.Interface, pod *v1.Pod) *v1.Pod {
+	_, err := CreatePod(c, pod)
+	gomega.Expect(err).To(gomega.BeNil())
+
+	err = wait.PollImmediate(2*time.Second, 5*time.Minute, podRunningAndReady(c, pod.Name, pod.Namespace))
+	gomega.Expect(err).To(gomega.BeNil())
+
+	// Get the newest pod after it becomes running and ready, some status may change after pod created, such as pod ip.
+	p, err := c.CoreV1().Pods(pod.Namespace).Get(context.TODO(), pod.Name, metav1.GetOptions{})
+	gomega.Expect(err).To(gomega.BeNil())
+	return p
+}
+
+func podRunningAndReady(c clientset.Interface, podName, namespace string) wait.ConditionFunc {
+	return func() (bool, error) {
+		pod, err := c.CoreV1().Pods(namespace).Get(context.TODO(), podName, metav1.GetOptions{})
+		if err != nil {
+			return false, err
+		}
+		switch pod.Status.Phase {
+		case v1.PodFailed, v1.PodSucceeded:
+			Infof("The status of Pod %s is %s which is unexpected", podName, pod.Status.Phase)
+			return false, fmt.Errorf("pod ran to completion")
+		case v1.PodRunning:
+			Infof("The status of Pod %s is %s (Ready = %v)", podName, pod.Status.Phase, podutils.IsPodReady(pod))
+			return podutils.IsPodReady(pod), nil
+		}
+		Infof("The status of Pod %s is %s, waiting for it to be Running (with Ready = true)", podName, pod.Status.Phase)
+		return false, nil
+	}
+}
+
+func NewDevicePluginPod(imgURL string) *v1.Pod {
+	pod := v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      sampleDevicePluginName,
+			Namespace: v1.NamespaceDefault,
+		},
+		Spec: v1.PodSpec{
+			Tolerations: []v1.Toleration{
+				{
+					Operator: v1.TolerationOpExists,
+					Effect:   v1.TaintEffectNoExecute,
+				}, {
+					Operator: v1.TolerationOpExists,
+					Effect:   v1.TaintEffectNoSchedule,
+				},
+			},
+			Volumes: []v1.Volume{
+				{
+					Name: "device-plugin",
+					VolumeSource: v1.VolumeSource{
+						HostPath: &v1.HostPathVolumeSource{
+							Path: "/var/lib/edged/device-plugins",
+						},
+					},
+				}, {
+					Name: "plugins-registry-probe-mode",
+					VolumeSource: v1.VolumeSource{
+						HostPath: &v1.HostPathVolumeSource{
+							Path: "/var/lib/edged/plugins_registry",
+						},
+					},
+				}, {
+					Name: "dev",
+					VolumeSource: v1.VolumeSource{
+						HostPath: &v1.HostPathVolumeSource{
+							Path: "/dev",
+						},
+					},
+				},
+			},
+			Containers: []v1.Container{
+				{
+					Image: imgURL,
+					Name:  "sample-device-plugin",
+					Env: []v1.EnvVar{
+						{
+							Name:  "PLUGIN_SOCK_DIR",
+							Value: "/var/lib/edged/device-plugins",
+						},
+					},
+					VolumeMounts: []v1.VolumeMount{
+						{
+							Name:      "device-plugin",
+							MountPath: "/var/lib/edged/device-plugins",
+						}, {
+							Name:      "plugins-registry-probe-mode",
+							MountPath: "/var/lib/edged/plugins_registry",
+						}, {
+							Name:      "dev",
+							MountPath: "/dev",
+						},
+					},
+				},
+			},
+			NodeSelector: map[string]string{
+				"node-role.kubernetes.io/edge": "",
+			},
+		},
+	}
+	return &pod
+}
+
+// NewBusyboxPod returns a simple Pod spec with a busybox container
+// that requests resourceName and runs the specified command.
+func NewBusyboxPod(resourceName, cmd string) *v1.Pod {
+	podName := "device-plugin-test-" + string(uuid.NewUUID())
+	rl := v1.ResourceList{v1.ResourceName(resourceName): *resource.NewQuantity(1, resource.DecimalSI)}
+
+	return &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: podName},
+		Spec: v1.PodSpec{
+			RestartPolicy: v1.RestartPolicyAlways,
+			Containers: []v1.Container{{
+				Image: LoadConfig().AppImageURL[3],
+				Name:  podName,
+				// Runs the specified command in the test pod.
+				Command: []string{"sh", "-c", cmd},
+				Resources: v1.ResourceRequirements{
+					Limits:   rl,
+					Requests: rl,
+				},
+			}},
+		},
+	}
+}
+
+// NumberOfSampleResources returns the number of resources advertised by a node.
+func NumberOfSampleResources(node *v1.Node) int64 {
+	val, ok := node.Status.Capacity[sampleResourceName]
+
+	if !ok {
+		return 0
+	}
+
+	return val.Value()
 }

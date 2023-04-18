@@ -23,6 +23,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"k8s.io/apimachinery/pkg/labels"
 	"net/http"
 	"os"
 	"path"
@@ -251,25 +252,13 @@ func TaintEdgeDeployedNode(toTaint bool, taintHandler string) error {
 	return nil
 }
 
-//GetNodes function to get configmaps for respective edgenodes
-func GetNodes(api string) v1.NodeList {
-	var nodes v1.NodeList
-	resp, err := SendHTTPRequest(http.MethodGet, api)
-	if err != nil {
-		Fatalf("Sending SenHttpRequest failed: %v", err)
-	}
-	defer resp.Body.Close()
+//GetEdgeNodes get nodes with edge label
+func GetEdgeNode(c clientset.Interface) *v1.Node {
+	nodeList, err := c.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{LabelSelector: labels.Set{"node-role.kubernetes.io/edge": ""}.AsSelector().String()})
+	gomega.Expect(err).To(gomega.BeNil())
+	gomega.Expect(len(nodeList.Items)).To(gomega.Equal(1))
 
-	contents, err := io.ReadAll(resp.Body)
-	if err != nil {
-		Fatalf("HTTP Response reading has failed: %v", err)
-	}
-	err = json.Unmarshal(contents, &nodes)
-	if err != nil {
-		Fatalf("Unmarshal HTTP Response has failed: %v", err)
-	}
-
-	return nodes
+	return &nodeList.Items[0]
 }
 
 func ApplyLabelToNode(apiserver, key, val string) error {

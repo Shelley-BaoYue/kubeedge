@@ -1,17 +1,30 @@
 package utils
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"net/http"
 	"reflect"
+	"strings"
+	"time"
 
+	MQTT "github.com/eclipse/paho.mqtt.golang"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	rulesv1 "github.com/kubeedge/kubeedge/pkg/apis/rules/v1"
 	edgeclientset "github.com/kubeedge/kubeedge/pkg/client/clientset/versioned"
 )
+
+type ServicebusResponse struct {
+	Code int    `json:"code"`
+	Msg  string `json:"msg"`
+	Body string `json:"body"`
+}
 
 func NewRule(sourceType, targetType rulesv1.RuleEndpointTypeDef) *rulesv1.Rule {
 	switch {
@@ -277,4 +290,87 @@ func ListRuleEndpoint(c edgeclientset.Interface, ns string) ([]rulesv1.RuleEndpo
 	}
 
 	return rules.Items, nil
+}
+
+func CallServicebus() (response string, err error) {
+	var servicebusResponse ServicebusResponse
+	payload := strings.NewReader(`{"method":"POST","targetURL":"http://127.0.0.1:9000/echo","payload":""}`)
+	client := &http.Client{}
+	req, _ := http.NewRequest(http.MethodPost, "http://127.0.0.1:9060", payload)
+	req.Header.Add("Content-Type", "application/json")
+	resp, _ := client.Do(req)
+	body, _ := io.ReadAll(resp.Body)
+	err = json.Unmarshal(body, &servicebusResponse)
+	response = servicebusResponse.Body
+	return
+}
+
+func StartEchoServer() (string, error) {
+	r := make(chan string)
+	echo := func(response http.ResponseWriter, request *http.Request) {
+		b, _ := io.ReadAll(request.Body)
+		r <- string(b)
+		if _, err := response.Write([]byte("Hello World")); err != nil {
+			Errorf("Echo server write failed. reason: %s", err.Error())
+		}
+	}
+	url := func(response http.ResponseWriter, request *http.Request) {
+		b, _ := io.ReadAll(request.Body)
+		var buff bytes.Buffer
+		buff.WriteString("Reply from server: ")
+		buff.Write(b)
+		buff.WriteString(" Header of the message: [user]: " + request.Header.Get("user") +
+			", [passwd]: " + request.Header.Get("passwd"))
+		if _, err := response.Write(buff.Bytes()); err != nil {
+			Errorf("Echo server write failed. reason: %s", err.Error())
+		}
+		r <- buff.String()
+	}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/echo", echo)
+	mux.HandleFunc("/url", url)
+	server := &http.Server{Addr: "127.0.0.1:9000", Handler: mux}
+	go func() {
+		err := server.ListenAndServe()
+		Errorf("Echo server stop. reason: %s", err.Error())
+	}()
+	t := time.NewTimer(time.Second * 30)
+	select {
+	case resp := <-r:
+		err := server.Shutdown(context.TODO())
+		return resp, err
+	case <-t.C:
+		err := server.Shutdown(context.TODO())
+		close(r)
+		return "", err
+	}
+}
+
+// SubscribeMqtt subscribes the device twin information through the MQTT broker
+func SubscribeMqtt(topic string) (string, error) {
+	r := make(chan string)
+	TokenClient = Client.Subscribe(topic, 0, func(client MQTT.Client, message MQTT.Message) {
+		r <- string(message.Payload())
+	})
+	if TokenClient.Wait() && TokenClient.Error() != nil {
+		return "", fmt.Errorf("subscribe() Error in topic %s. reason: %s", topic, TokenClient.Error().Error())
+	}
+	t := time.NewTimer(time.Second * 30)
+	select {
+	case result := <-r:
+		Infof("subscribe topic %s to get result: %s", topic, result)
+		return result, nil
+	case <-t.C:
+		close(r)
+		return "", fmt.Errorf("wait for MQTT message time out. ")
+	}
+}
+
+func PublishMqtt(topic, message string) error {
+	TokenClient = Client.Publish(topic, 0, false, message)
+	if TokenClient.Wait() && TokenClient.Error() != nil {
+		return fmt.Errorf("client.publish() Error in topic %s. reason: %s. ", topic, TokenClient.Error().Error())
+	}
+	Infof("publish topic %s message %s", topic, message)
+	return nil
 }
