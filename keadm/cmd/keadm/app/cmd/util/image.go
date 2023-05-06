@@ -33,6 +33,7 @@ import (
 	"k8s.io/klog/v2"
 	"k8s.io/kubernetes/pkg/kubelet/cri/remote"
 	kubetypes "k8s.io/kubernetes/pkg/kubelet/types"
+	"github.com/containerd/containerd"
 
 	"github.com/kubeedge/kubeedge/common/constants"
 	"github.com/kubeedge/kubeedge/pkg/image"
@@ -65,6 +66,7 @@ func NewContainerRuntime(runtimeType string, endpoint string) (ContainerRuntime,
 			ctx:    ctx,
 		}
 	case kubetypes.RemoteContainerRuntime:
+		containerd.containerd.New("/run/containerd/containerd.sock")
 		imageService, err := remote.NewRemoteImageService(endpoint, time.Second*10)
 		if err != nil {
 			return runtime, err
