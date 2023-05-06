@@ -23,6 +23,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/containerd/containerd"
 	dockertypes "github.com/docker/docker/api/types"
 	dockercontainer "github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
@@ -33,7 +34,6 @@ import (
 	"k8s.io/klog/v2"
 	"k8s.io/kubernetes/pkg/kubelet/cri/remote"
 	kubetypes "k8s.io/kubernetes/pkg/kubelet/types"
-	"github.com/containerd/containerd"
 
 	"github.com/kubeedge/kubeedge/common/constants"
 	"github.com/kubeedge/kubeedge/pkg/image"
@@ -66,7 +66,12 @@ func NewContainerRuntime(runtimeType string, endpoint string) (ContainerRuntime,
 			ctx:    ctx,
 		}
 	case kubetypes.RemoteContainerRuntime:
-		containerd.containerd.New("/run/containerd/containerd.sock")
+		cli, err := containerd.New("/run/containerd/containerd.sock")
+		if err != nil {
+			return runtime, fmt.Errorf("init containerd client failed: %v", err)
+		}
+		ctx := context.Background()
+
 		imageService, err := remote.NewRemoteImageService(endpoint, time.Second*10)
 		if err != nil {
 			return runtime, err
@@ -79,6 +84,8 @@ func NewContainerRuntime(runtimeType string, endpoint string) (ContainerRuntime,
 			endpoint:            endpoint,
 			ImageManagerService: imageService,
 			RuntimeService:      runtimeService,
+			Client:              cli,
+			ctx:                 ctx,
 		}
 	default:
 		return runtime, fmt.Errorf("unsupport CRI runtime: %s", runtimeType)
@@ -232,6 +239,8 @@ type CRIRuntime struct {
 	endpoint            string
 	ImageManagerService internalapi.ImageManagerService
 	RuntimeService      internalapi.RuntimeService
+	Client              *containerd.Client
+	ctx                 context.Context
 }
 
 func (runtime *CRIRuntime) PullImages(images []string) error {
@@ -326,42 +335,12 @@ func (runtime *CRIRuntime) CopyResources(edgeImage string, files map[string]stri
 }
 
 func (runtime *CRIRuntime) RunMQTT(mqttImage string) error {
-	psc := &runtimeapi.PodSandboxConfig{
-		Metadata: &runtimeapi.PodSandboxMetadata{Name: image.EdgeMQTT},
-		PortMappings: []*runtimeapi.PortMapping{
-			{
-				ContainerPort: 1883,
-				HostPort:      1883,
-			},
-			{
-				ContainerPort: 9001,
-				HostPort:      9001,
-			},
-		},
-		Labels: mqttLabel,
-	}
-	sandbox, err := runtime.RuntimeService.RunPodSandbox(psc, "")
+	image, err := runtime.Client.GetImage(runtime.ctx, mqttImage)
 	if err != nil {
 		return err
 	}
-
-	containerConfig := &runtimeapi.ContainerConfig{
-		Metadata: &runtimeapi.ContainerMetadata{Name: image.EdgeMQTT},
-		Image: &runtimeapi.ImageSpec{
-			Image: mqttImage,
-		},
-		Mounts: []*runtimeapi.Mount{
-			{
-				ContainerPath: "/mosquitto",
-				HostPath:      filepath.Join(KubeEdgeSocketPath, image.EdgeMQTT),
-			},
-		},
-	}
-	containerID, err := runtime.RuntimeService.CreateContainer(sandbox, containerConfig, psc)
-	if err != nil {
-		return err
-	}
-	return runtime.RuntimeService.StartContainer(containerID)
+	_, err = runtime.Client.NewContainer(runtime.ctx, "mqtt", containerd.WithImage(image))
+	return err
 }
 
 func (runtime *CRIRuntime) RemoveMQTT() error {
