@@ -19,8 +19,12 @@ package util
 import (
 	"context"
 	"fmt"
+	"github.com/containerd/containerd/cio"
+	"github.com/containerd/containerd/namespaces"
+	"github.com/containerd/containerd/oci"
 	"io"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/containerd/containerd"
@@ -29,6 +33,7 @@ import (
 	"github.com/docker/docker/api/types/filters"
 	dockerclient "github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
+	specs "github.com/opencontainers/runtime-spec/specs-go"
 	internalapi "k8s.io/cri-api/pkg/apis"
 	runtimeapi "k8s.io/cri-api/pkg/apis/runtime/v1"
 	"k8s.io/klog/v2"
@@ -66,11 +71,11 @@ func NewContainerRuntime(runtimeType string, endpoint string) (ContainerRuntime,
 			ctx:    ctx,
 		}
 	case kubetypes.RemoteContainerRuntime:
-		cli, err := containerd.New("/run/containerd/containerd.sock")
+		cli, err := containerd.New("/run/containerd/containerd.sock", containerd.WithDefaultNamespace("default"))
 		if err != nil {
 			return runtime, fmt.Errorf("init containerd client failed: %v", err)
 		}
-		ctx := context.Background()
+		ctx := namespaces.WithNamespace(context.Background(), "default")
 
 		imageService, err := remote.NewRemoteImageService(endpoint, time.Second*10)
 		if err != nil {
@@ -243,18 +248,30 @@ type CRIRuntime struct {
 	ctx                 context.Context
 }
 
+func convertCRIImage(image string) string {
+	imageSeg := strings.Split(image, "/")
+	if len(imageSeg) == 1 {
+		return "docker.io/library/" + image
+	} else if len(imageSeg) == 2 {
+		return "docker.io/" + image
+	}
+	return image
+}
+
 func (runtime *CRIRuntime) PullImages(images []string) error {
 	for _, image := range images {
+		image = convertCRIImage(image)
 		fmt.Printf("Pulling %s ...\n", image)
-		imageSpec := &runtimeapi.ImageSpec{Image: image}
-		status, err := runtime.ImageManagerService.ImageStatus(imageSpec)
+		filter := "name==" + image
+		list, err := runtime.Client.ListImages(runtime.ctx, filter)
 		if err != nil {
 			return err
 		}
-		if status == nil || status.Id == "" {
-			if _, err := runtime.ImageManagerService.PullImage(imageSpec, nil, nil); err != nil {
-				return err
-			}
+		if len(list) > 0 {
+			continue
+		}
+		if _, err := runtime.Client.Pull(runtime.ctx, image, containerd.WithPullUnpack); err != nil {
+			return err
 		}
 		fmt.Printf("Successfully pulled %s\n", image)
 	}
@@ -335,11 +352,37 @@ func (runtime *CRIRuntime) CopyResources(edgeImage string, files map[string]stri
 }
 
 func (runtime *CRIRuntime) RunMQTT(mqttImage string) error {
-	image, err := runtime.Client.GetImage(runtime.ctx, mqttImage)
+	image, err := runtime.Client.GetImage(runtime.ctx, convertCRIImage(mqttImage))
 	if err != nil {
 		return err
 	}
-	_, err = runtime.Client.NewContainer(runtime.ctx, "mqtt", containerd.WithImage(image))
+
+	mount := []specs.Mount{
+		{
+			Destination: "/mosquitto",
+			Type:        "bind",
+			Source:      "/var/lib/kubeedge/mqtt",
+			Options: []string{
+				"rbind",
+				"rprivate",
+				"rw",
+			},
+		},
+	}
+
+	c, err := runtime.Client.NewContainer(runtime.ctx, "mqtt", containerd.WithNewSnapshot("mqtt-rootfs", image),
+		containerd.WithNewSpec(oci.WithUserID(0), oci.WithMounts(mount), oci.WithImageConfig(image)))
+	if err != nil {
+		return err
+	}
+
+	t, err := c.NewTask(runtime.ctx, cio.NewCreator(cio.WithStdio))
+	if err != nil {
+		return err
+	}
+
+	err = t.Start(runtime.ctx)
+
 	return err
 }
 
