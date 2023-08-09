@@ -275,12 +275,6 @@ func createEdgeConfigFiles(opt *common.JoinOptions) error {
 	}
 
 	edgeCoreConfig.Modules.EdgeHub.WebSocket.Server = opt.CloudCoreIPPort
-	// TODO: remove this after release 1.14
-	// this is for keeping backward compatibility
-	// don't save token in configuration edgecore.yaml
-	if opt.Token != "" {
-		edgeCoreConfig.Modules.EdgeHub.Token = opt.Token
-	}
 	if opt.EdgeNodeName != "" {
 		edgeCoreConfig.Modules.Edged.HostnameOverride = opt.EdgeNodeName
 	}
