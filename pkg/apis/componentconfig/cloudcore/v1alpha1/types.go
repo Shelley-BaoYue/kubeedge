@@ -285,6 +285,9 @@ type EdgeControllerBuffer struct {
 	// ServiceAccount indicates the buffer of service account token
 	// default 1024
 	ServiceAccountToken int32 `json:"serviceAccountToken,omitempty"`
+	// CreatePod indicates the buffer of patch pod
+	// default 1024
+	CreatePod int32 `json:"createPod,omitempty"`
 }
 
 // EdgeControllerLoad indicates the EdgeController load
@@ -340,6 +343,8 @@ type EdgeControllerLoad struct {
 	// ServiceAccountTokenWorkers indicates the load of service account token
 	// default 4
 	ServiceAccountTokenWorkers int32 `json:"ServiceAccountTokenWorkers,omitempty"`
+	// default 4
+	CreatePodWorks int32 `json:"CreatePodWorks,omitempty"`
 }
 
 // DeviceController indicates the device controller
@@ -419,7 +424,7 @@ type DynamicController struct {
 	Enable bool `json:"enable"`
 }
 
-// CloudStream indicates the stream controller
+// CloudSream indicates the stream controller
 type CloudStream struct {
 	// Enable indicates whether cloudstream is enabled, if set to false (for debugging etc.), skip checking other configs.
 	// default true
