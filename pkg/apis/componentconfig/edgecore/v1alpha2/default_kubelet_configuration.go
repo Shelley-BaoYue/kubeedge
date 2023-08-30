@@ -103,4 +103,5 @@ func SetDefaultsKubeletConfiguration(obj *TailoredKubeletConfiguration) {
 	obj.SeccompDefault = utilpointer.BoolPtr(false)
 	obj.MemoryThrottlingFactor = utilpointer.Float64Ptr(configv1beta1.DefaultMemoryThrottlingFactor)
 	obj.RegisterNode = utilpointer.BoolPtr(true)
+	obj.StaticPodPath = constants.DefaultManifestsDir
 }
