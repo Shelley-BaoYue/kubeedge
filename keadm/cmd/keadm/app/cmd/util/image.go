@@ -19,7 +19,6 @@ package util
 import (
 	"context"
 	"fmt"
-	oteltrace "go.opentelemetry.io/otel/trace"
 	"io"
 	"path/filepath"
 	"strings"
@@ -30,6 +29,7 @@ import (
 	"github.com/docker/docker/api/types/filters"
 	dockerclient "github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
+	oteltrace "go.opentelemetry.io/otel/trace"
 	internalapi "k8s.io/cri-api/pkg/apis"
 	runtimeapi "k8s.io/cri-api/pkg/apis/runtime/v1"
 	"k8s.io/klog/v2"
