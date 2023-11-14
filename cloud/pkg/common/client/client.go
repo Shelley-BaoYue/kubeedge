@@ -100,5 +100,5 @@ type RestMapperFunc func() (meta.RESTMapper, error)
 var DefaultGetRestMapper RestMapperFunc = GetRestMapper
 
 func GetRestMapper() (meta.RESTMapper, error) {
-	return apiutil.NewDynamicRESTMapper(KubeConfig)
+	return apiutil.NewDynamicRESTMapper(KubeConfig, nil)
 }

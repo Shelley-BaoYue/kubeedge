@@ -999,7 +999,7 @@ func TestFilterResource(t *testing.T) {
 			if !reflect.DeepEqual(got, tc.rbacResult) {
 				t.Errorf("case %q want=%v, got=%v", tc.name, tc.rbacResult, got)
 			}
-			got2 := ctr.mapRolesFunc(tc.rbacObj)
+			got2 := ctr.mapRolesFunc(context.Background(), tc.rbacObj)
 			if !equality.Semantic.DeepEqual(got2, tc.reconcileResult) {
 				t.Errorf("case %q want=%v, got=%v", tc.name, tc.reconcileResult, got2)
 			}
@@ -1225,7 +1225,7 @@ func TestMapObjectFunc(t *testing.T) {
 		ctr := &Controller{
 			Client: fakeClient,
 		}
-		got := ctr.mapObjectFunc(tc.obj)
+		got := ctr.mapObjectFunc(context.Background(), tc.obj)
 		if !equality.Semantic.DeepEqual(got, tc.reconcileResult) {
 			t.Errorf("mapObjectFunc() = %v, want %v", got, tc.reconcileResult)
 		}

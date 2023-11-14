@@ -30,8 +30,8 @@ type claimTestCase struct {
 	name      string
 	getter    serviceaccount.ServiceAccountTokenGetter
 	private   *privateClaims
-	expiry    jwt.NumericDate
-	notBefore jwt.NumericDate
+	expiry    *jwt.NumericDate
+	notBefore *jwt.NumericDate
 	expectErr string
 }
 
@@ -173,10 +173,10 @@ func TestValidatePrivateClaims(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			v := &validator{tc.getter}
 			expiry := jwt.NumericDate(nowUnix)
-			if tc.expiry != 0 {
-				expiry = tc.expiry
+			if *tc.expiry != 0 {
+				expiry = *tc.expiry
 			}
-			_, err := v.Validate(context.Background(), "", &jwt.Claims{Expiry: expiry, NotBefore: tc.notBefore}, tc.private)
+			_, err := v.Validate(context.Background(), "", &jwt.Claims{Expiry: &expiry, NotBefore: tc.notBefore}, tc.private)
 			if len(tc.expectErr) > 0 {
 				if errStr := errString(err); tc.expectErr != errStr {
 					t.Fatalf("expected error %q but got %q", tc.expectErr, errStr)
