@@ -6,7 +6,7 @@ on:
 
 env:
   CONTAINER_RUN_OPTIONS: " "
-  IMAGE_REPOSITORY: kubeedge
+  IMAGE_REPOSITORY: shelleyby
 
 jobs:
   release-assests:
@@ -21,12 +21,6 @@ jobs:
       hash-kubeedge-amd64: ${{ steps.hash.outputs.hash-kubeedge-amd64 }}
       hash-kubeedge-arm64: ${{ steps.hash.outputs.hash-kubeedge-arm64 }}
       hash-kubeedge-arm:   ${{ steps.hash.outputs.hash-kubeedge-arm }}
-      hash-keadm-amd64:    ${{ steps.hash.outputs.hash-keadm-amd64 }}
-      hash-keadm-arm64:    ${{ steps.hash.outputs.hash-keadm-arm64 }}
-      hash-keadm-arm:      ${{ steps.hash.outputs.hash-keadm-arm }}
-      hash-edgesite-amd64: ${{ steps.hash.outputs.hash-edgesite-amd64 }}
-      hash-edgesite-arm64: ${{ steps.hash.outputs.hash-edgesite-arm64 }}
-      hash-edgesite-arm:   ${{ steps.hash.outputs.hash-edgesite-arm }}
     steps:
       - name: checkout code
         uses: actions/checkout@v3
@@ -78,7 +72,7 @@ jobs:
       actions: read
       id-token: write
       contents: write
-    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v1.2.2
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v1.9.0
     with:
       base64-subjects: "${{ needs.combine_hashes.outputs.hashes }}"
       # Upload provenance to a new release
@@ -88,17 +82,9 @@ jobs:
     name: publish to DockerHub
     strategy:
       matrix:
-        target: [cloudcore, admission, edgesite-agent, edgesite-server, csidriver, iptables-manager, edgemark, installation-package, controller-manager]
+        target: [cloudcore]
     outputs:
       hash-digest-cloudcore: ${{ steps.hash.outputs.hash-digest-cloudcore }}
-      hash-digest-admission: ${{ steps.hash.outputs.hash-digest-admission }}
-      hash-digest-edgesite-agent: ${{ steps.hash.outputs.hash-digest-edgesite-agent }}
-      hash-digest-edgesite-server: ${{ steps.hash.outputs.hash-digest-edgesite-server }}
-      hash-digest-csidriver: ${{ steps.hash.outputs.hash-digest-csidriver }}
-      hash-digest-iptables-manager: ${{ steps.hash.outputs.hash-digest-iptables-manager }}
-      hash-digest-edgemark: ${{ steps.hash.outputs.hash-digest-edgemark }}
-      hash-digest-installation-package: ${{ steps.hash.outputs.hash-digest-installation-package }}
-      hash-digest-controller-manager: ${{ steps.hash.outputs.hash-digest-controller-manager }}
     runs-on: ubuntu-22.04
     steps:
       - name: checkout code
@@ -141,15 +127,15 @@ jobs:
     needs: [publish-image-to-dockerhub]
     strategy:
       matrix:
-        target: [cloudcore, admission, edgesite-agent, edgesite-server, csidriver, iptables-manager, edgemark, installation-package, controller-manager]
+        target: [cloudcore]
     permissions:
       actions: read # for detecting the Github Actions environment.
       id-token: write # for creating OIDC tokens for signing.
       packages: write # for uploading attestations.
     if: startsWith(github.ref, 'refs/tags/')
-    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@v1.4.0
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@v1.9.0
     with:
-      image: kubeedge/${{ matrix.target }}
+      image: shelleyby/${{ matrix.target }}
       registry-username: ${{ vars.DOCKERHUB_USER_NAME }}
       digest: ${{ needs.publish-image-to-dockerhub.outputs[format('hash-digest-{0}', matrix.target)] }}
     secrets:
