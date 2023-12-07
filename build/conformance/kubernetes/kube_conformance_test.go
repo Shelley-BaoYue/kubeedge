@@ -17,10 +17,5 @@ limitations under the License.
 package e2e
 
 import (
-	_ "k8s.io/kubernetes/test/e2e/apps"
-	_ "k8s.io/kubernetes/test/e2e/auth"
-	_ "k8s.io/kubernetes/test/e2e/common"
-	_ "k8s.io/kubernetes/test/e2e/node"
-	_ "k8s.io/kubernetes/test/e2e/scheduling"
-	_ "k8s.io/kubernetes/test/e2e/storage"
+	_ "k8s.io/kubernetes/test/e2e"
 )
