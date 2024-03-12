@@ -107,7 +107,7 @@ func (dctl *DynamicController) receiveMessage() {
 			continue
 		}
 
-		klog.V(4).Infof("[DynamicController] receive, msg: %+v", msg)
+		klog.Infof("[DynamicController] receive, msg: %+v", msg)
 		dctl.applicationCenter.Process(msg)
 	}
 }

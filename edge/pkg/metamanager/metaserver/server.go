@@ -6,6 +6,8 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
+	"github.com/kubeedge/kubeedge/pkg/util"
+	"net"
 	"net/http"
 	"os"
 	"time"
@@ -168,7 +170,7 @@ func (ls *MetaServer) startHTTPServer(stopChan <-chan struct{}) {
 	beehiveContext.Cancel()
 }
 
-func (ls *MetaServer) startHTTPSServer(stopChan <-chan struct{}) {
+func (ls *MetaServer) startHTTPSServer(addr string, stopChan <-chan struct{}) {
 	_, err := ls.getCurrent()
 	if err != nil {
 		// wait for cert created
@@ -180,7 +182,7 @@ func (ls *MetaServer) startHTTPSServer(stopChan <-chan struct{}) {
 	h = BuildHandlerChain(h, ls)
 	tlsConfig := createTLSConfig()
 	s := http.Server{
-		Addr:      metaserverconfig.Config.Server,
+		Addr:      addr,
 		Handler:   h,
 		TLSConfig: &tlsConfig,
 	}
@@ -203,7 +205,9 @@ func (ls *MetaServer) startHTTPSServer(stopChan <-chan struct{}) {
 
 func (ls *MetaServer) Start(stopChan <-chan struct{}) {
 	if kefeatures.DefaultFeatureGate.Enabled(kefeatures.RequireAuthorization) {
-		ls.startHTTPSServer(stopChan)
+		setupDummyInterface()
+		go ls.startHTTPSServer(metaserverconfig.Config.Server, stopChan)
+		go ls.startHTTPSServer(metaserverconfig.Config.DummyServer, stopChan)
 	} else {
 		ls.startHTTPServer(stopChan)
 	}
@@ -265,4 +269,30 @@ func BuildHandlerChain(handler http.Handler, ls *MetaServer) http.Handler {
 	handler = genericapifilters.WithRequestInfo(handler, server.NewRequestInfoResolver(cfg))
 	handler = genericfilters.WithPanicRecovery(handler, &apirequest.RequestInfoFactory{})
 	return handler
+}
+
+func setupDummyInterface() {
+	dummyIP, dummyPort, err := net.SplitHostPort(metaserverconfig.Config.DummyServer)
+	if err != nil {
+		panic(err)
+	}
+
+	if err := os.Setenv("METASERVER_DUMMY_IP", dummyIP); err != nil {
+		panic(err)
+	}
+
+	if err := os.Setenv("METASERVER_DUMMY_PORT", dummyPort); err != nil {
+		panic(err)
+	}
+
+	manager := util.NewDummyDeviceManager()
+	_, err = manager.EnsureDummyDevice("edge-dummy0")
+	if err != nil {
+		panic(err)
+	}
+
+	_, err = manager.EnsureAddressBind(dummyIP, "edge-dummy0")
+	if err != nil {
+		panic(err)
+	}
 }

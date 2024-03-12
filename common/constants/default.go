@@ -58,8 +58,9 @@ const (
 	CurrentSupportK8sVersion = "v1.27.7"
 
 	// MetaManager
-	DefaultRemoteQueryTimeout = 60
-	DefaultMetaServerAddr     = "127.0.0.1:10550"
+	DefaultRemoteQueryTimeout  = 60
+	DefaultMetaServerAddr      = "127.0.0.1:10550"
+	DefaultDummyMetaServerAddr = "169.254.66.16:10550"
 
 	// Config
 	DefaultKubeContentType         = "application/vnd.kubernetes.protobuf"

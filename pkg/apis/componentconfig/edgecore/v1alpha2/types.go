@@ -1001,6 +1001,7 @@ type MetaServer struct {
 	ServiceAccountIssuers  []string `json:"serviceAccountIssuers"`
 	APIAudiences           []string `json:"apiAudiences"`
 	ServiceAccountKeyFiles []string `json:"serviceAccountKeyFiles"`
+	DummyServer            string   `json:"dummyServer"`
 }
 
 // ServiceBus indicates the ServiceBus module config
