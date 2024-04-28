@@ -247,3 +247,7 @@ func runEdgeCore() error {
 func KillKubeEdgeBinary(proc string) error {
 	return errors.New("not implemented")
 }
+
+func EdgeCoreRunningModuleV2(opt *types.ResetOptions) types.ModuleRunning {
+	return types.NoneRunning
+}
