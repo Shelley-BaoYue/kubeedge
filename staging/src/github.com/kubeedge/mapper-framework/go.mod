@@ -1,6 +1,8 @@
 module github.com/kubeedge/mapper-framework
 
-go 1.22
+go 1.22.0
+
+toolchain go1.22.9
 
 require (
 	github.com/avast/retry-go v3.0.0+incompatible
@@ -12,7 +14,7 @@ require (
 	google.golang.org/grpc v1.63.0
 	google.golang.org/protobuf v1.33.0
 	gopkg.in/yaml.v2 v2.4.0
-	k8s.io/klog/v2 v2.110.1
+	k8s.io/klog/v2 v2.120.1
 )
 
 require (
