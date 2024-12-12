@@ -70,25 +70,25 @@ done
 
 if [ "${GENS}" = "all" ] || grep -qw "deepcopy" <<<"${GENS}"; then
   echo "Generating deepcopy funcs"
-  "${GOBIN}/deepcopy-gen" --input-dirs "$(codegen::join , "${FQ_APIS[@]}")" -O zz_generated.deepcopy --bounding-dirs "${APIS_PKG}" "$@"
+  "${GOBIN}/deepcopy-gen"  --output-file zz_generated.deepcopy.go --bounding-dirs "$(codegen::join , "${FQ_APIS[@]}")" "$@"
 fi
 
 if [ "${GENS}" = "all" ] || grep -qw "client" <<<"${GENS}"; then
   echo "Generating clientset for ${GROUPS_WITH_VERSIONS} at ${OUTPUT_PKG}/${CLIENTSET_PKG_NAME:-clientset}"
-  "${GOBIN}/client-gen" --clientset-name "${CLIENTSET_NAME_VERSIONED:-versioned}" --input-base "" --input "$(codegen::join , "${FQ_APIS[@]}")" --output-package "${OUTPUT_PKG}/${CLIENTSET_PKG_NAME:-clientset}" "$@"
+  "${GOBIN}/client-gen" --clientset-name "${CLIENTSET_NAME_VERSIONED:-versioned}" --input-base "" --input "$(codegen::join , "${FQ_APIS[@]}")" --output-pkg "${OUTPUT_PKG}/${CLIENTSET_PKG_NAME:-clientset}" --output-dir "${OUTPUT_PKG}/${CLIENTSET_PKG_NAME:-clientset}" "$@"
 fi
 
 if [ "${GENS}" = "all" ] || grep -qw "lister" <<<"${GENS}"; then
   echo "Generating listers for ${GROUPS_WITH_VERSIONS} at ${OUTPUT_PKG}/listers"
-  "${GOBIN}/lister-gen" --input-dirs "$(codegen::join , "${FQ_APIS[@]}")" --output-package "${OUTPUT_PKG}/listers" "$@"
+  "${GOBIN}/lister-gen"  --output-pkg "${OUTPUT_PKG}/listers" --output-dir "${OUTPUT_PKG}/listers"  "$@"
 fi
 
 if [ "${GENS}" = "all" ] || grep -qw "informer" <<<"${GENS}"; then
   echo "Generating informers for ${GROUPS_WITH_VERSIONS} at ${OUTPUT_PKG}/informers"
   "${GOBIN}/informer-gen" \
-           --input-dirs "$(codegen::join , "${FQ_APIS[@]}")" \
            --versioned-clientset-package "${OUTPUT_PKG}/${CLIENTSET_PKG_NAME:-clientset}/${CLIENTSET_NAME_VERSIONED:-versioned}" \
            --listers-package "${OUTPUT_PKG}/listers" \
-           --output-package "${OUTPUT_PKG}/informers" \
+           --output-pkg "${OUTPUT_PKG}/informers" \
+	   --output-dir "${OUTPUT_PKG}/informers" \
            "$@"
 fi
