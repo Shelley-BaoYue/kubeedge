@@ -1,5 +1,5 @@
 /*
-Copyright 2020 The Kubernetes Authors.
+Copyright 2023 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,6 +14,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package config contains functionality for interacting with
-// configuration for controller-runtime components.
-package config
+/*
+Package server provides the metrics server implementation.
+*/
+package server
+
+import (
+	logf "sigs.k8s.io/controller-runtime/pkg/internal/log"
+)
+
+var log = logf.RuntimeLog.WithName("metrics")
