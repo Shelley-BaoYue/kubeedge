@@ -19,7 +19,6 @@ set -o nounset
 set -o pipefail
 
 KUBEEDGE_ROOT=$(unset CDPATH && cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
-
 export GOPATH="${GOPATH:-$(go env GOPATH)}"
 
 go_path="${KUBEEDGE_ROOT}/_go"

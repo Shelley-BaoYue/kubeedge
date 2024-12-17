@@ -69,18 +69,18 @@ for GVs in ${GROUPS_WITH_VERSIONS}; do
 done
 
 if [ "${GENS}" = "all" ] || grep -qw "deepcopy" <<<"${GENS}"; then
-  echo "Generating deepcopy funcs"
-  "${GOBIN}/deepcopy-gen"  --output-file zz_generated.deepcopy.go --bounding-dirs "$(codegen::join , "${FQ_APIS[@]}")" "$@"
+  echo "Generating deepcopy funcs "$(codegen::join , "${FQ_APIS[@]}")""
+  "${GOBIN}/deepcopy-gen"  --output-file zz_generated.deepcopy.go "${FQ_APIS[@]}" "$@"
 fi
 
 if [ "${GENS}" = "all" ] || grep -qw "client" <<<"${GENS}"; then
   echo "Generating clientset for ${GROUPS_WITH_VERSIONS} at ${OUTPUT_PKG}/${CLIENTSET_PKG_NAME:-clientset}"
-  "${GOBIN}/client-gen" --clientset-name "${CLIENTSET_NAME_VERSIONED:-versioned}" --input-base "" --input "$(codegen::join , "${FQ_APIS[@]}")" --output-pkg "${OUTPUT_PKG}/${CLIENTSET_PKG_NAME:-clientset}" --output-dir "${OUTPUT_PKG}/${CLIENTSET_PKG_NAME:-clientset}" "$@"
+  "${GOBIN}/client-gen" --clientset-name "${CLIENTSET_NAME_VERSIONED:-versioned}" --input-base "" --input "$(codegen::join , "${FQ_APIS[@]}")" --output-pkg "${OUTPUT_PKG}/${CLIENTSET_PKG_NAME:-clientset}" --output-dir "staging/src/github.com/kubeedge/api/client/${CLIENTSET_PKG_NAME:-clientset}" "$@"
 fi
 
 if [ "${GENS}" = "all" ] || grep -qw "lister" <<<"${GENS}"; then
   echo "Generating listers for ${GROUPS_WITH_VERSIONS} at ${OUTPUT_PKG}/listers"
-  "${GOBIN}/lister-gen"  --output-pkg "${OUTPUT_PKG}/listers" --output-dir "${OUTPUT_PKG}/listers"  "$@"
+  "${GOBIN}/lister-gen"  --output-pkg "${OUTPUT_PKG}/listers" --output-dir "staging/src/github.com/kubeedge/api/client/listers" "${FQ_APIS[@]}" "$@"
 fi
 
 if [ "${GENS}" = "all" ] || grep -qw "informer" <<<"${GENS}"; then
@@ -89,6 +89,7 @@ if [ "${GENS}" = "all" ] || grep -qw "informer" <<<"${GENS}"; then
            --versioned-clientset-package "${OUTPUT_PKG}/${CLIENTSET_PKG_NAME:-clientset}/${CLIENTSET_NAME_VERSIONED:-versioned}" \
            --listers-package "${OUTPUT_PKG}/listers" \
            --output-pkg "${OUTPUT_PKG}/informers" \
-	   --output-dir "${OUTPUT_PKG}/informers" \
+	   --output-dir "staging/src/github.com/kubeedge/api/client/informers" \
+	   "${FQ_APIS[@]}" \
            "$@"
 fi
