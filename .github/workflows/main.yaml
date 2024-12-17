@@ -384,6 +384,12 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Setup Debug Session
+        uses: mxschmitt/action-tmate@v3
+        timeout-minutes: 15
+        with:
+          detached: true
+
       - name: Run e2e
         run: make e2e
         env:
