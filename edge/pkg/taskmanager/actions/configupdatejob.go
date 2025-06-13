@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	daov2 "github.com/kubeedge/kubeedge/edge/pkg/metamanager/dao/v2"
 	"strings"
 
 	"github.com/go-logr/logr"
@@ -41,6 +42,8 @@ func newConfigUpdateJobRunner() *ActionRunner {
 		Flow:               actionflow.FlowConfigUpdateJob,
 		ReportActionStatus: handler.reportActionStatus,
 		GetSpecSerializer:  handler.getSpecSerializer,
+		PreRun:             handler.preRun,
+		PostRun:            handler.postRun,
 		Logger:             logger,
 	}
 	runner.addAction(string(operationsv1alpha2.ConfigUpdateJobActionCheck), handler.checkItems)
@@ -48,6 +51,37 @@ func newConfigUpdateJobRunner() *ActionRunner {
 	runner.addAction(string(operationsv1alpha2.ConfigUpdateJobActionUpdate), handler.updateConfig)
 	runner.addAction(string(operationsv1alpha2.ConfigUpdateJobActionRollBack), handler.rollback)
 	return runner
+}
+
+func (configUpdateJobActionHandler) preRun(
+	_ctx context.Context,
+	jobname, nodename, _action string,
+	specser SpecSerializer,
+) error {
+	spec, ok := specser.GetSpec().(*operationsv1alpha2.ConfigUpdateJobSpec)
+	if !ok {
+		return fmt.Errorf("failed to conv spec to NodeUpgradeJobSpec, actual type %T", specser.GetSpec())
+	}
+	upgradeDao := daov2.NewConfigUpdate()
+	if err := upgradeDao.Save(jobname, nodename, spec); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (configUpdateJobActionHandler) postRun(
+	_ctx context.Context,
+	_jobname, _nodename, _action string,
+	_specser SpecSerializer,
+) error {
+	// Since the keadm upgrade / rollback command is asynchronous, so this method can not be executed now.
+	// When obtaining the task report in the taskmanager module, it is also necessary to determine whether
+	// to delete the record in the meta_v2 table(hub_connected_hooker.go).
+	upgradeDao := daov2.NewConfigUpdate()
+	if err := upgradeDao.Delete(); err != nil {
+		return err
+	}
+	return nil
 }
 
 type configUpdateJobActionResponse struct {

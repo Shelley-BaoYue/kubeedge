@@ -99,12 +99,12 @@ func (h *ConfigUpdateJobHandler) UpdateNodeTaskStatus(
 		},
 		Callback: func(err error) {
 			if err != nil {
-				err = fmt.Errorf("failed to update image prepull job status, err: %v", err)
+				err = fmt.Errorf("failed to update config update job status, err: %v", err)
 			}
 			wg.Done()
 		},
 	}
-	status.GetImagePrePullJobStatusUpdater().UpdateStatus(opts)
+	status.GetConfigeUpdateJobStatusUpdater().UpdateStatus(opts)
 	wg.Wait()
 	return err
 }
