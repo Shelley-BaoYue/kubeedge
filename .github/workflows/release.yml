@@ -105,6 +105,7 @@ jobs:
         target: [cloudcore]
     outputs:
       hash-digest-cloudcore: ${{ steps.hash.outputs.hash-digest-cloudcore }}
+      hash-digest-conformance: ${{ steps.hash.outputs.hash-digest-conformance }}
     runs-on: ubuntu-22.04
     steps:
       - name: checkout code
@@ -147,7 +148,7 @@ jobs:
     needs: [publish-image-to-dockerhub]
     strategy:
       matrix:
-        target: [cloudcore]
+        target: [cloudcore, conformance]
     permissions:
       actions: read # for detecting the Github Actions environment.
       id-token: write # for creating OIDC tokens for signing.
