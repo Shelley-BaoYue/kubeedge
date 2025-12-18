@@ -9,95 +9,6 @@ env:
   IMAGE_REPOSITORY: kubeedge
 
 jobs:
-  release-assests:
-    name: release kubeedge components
-    runs-on: ubuntu-22.04
-    strategy:
-      matrix:
-        target: [kubeedge, edgesite, keadm]
-        os: [linux]
-        ARM_VERSION: [GOARM7, GOARM8, ""]
-        include:
-          - target: kubeedge
-            os: windows
-            ARM_VERSION: ""
-          - target: keadm
-            os: windows
-            ARM_VERSION: ""
-    outputs:
-      hash-kubeedge-linux-amd64: ${{ steps.hash.outputs.hash-kubeedge-linux-amd64 }}
-      hash-kubeedge-windows-amd64: ${{ steps.hash.outputs.hash-kubeedge-windows-amd64 }}
-      hash-kubeedge-linux-arm64: ${{ steps.hash.outputs.hash-kubeedge-linux-arm64 }}
-      hash-kubeedge-linux-arm:   ${{ steps.hash.outputs.hash-kubeedge-linux-arm }}
-      hash-keadm-linux-amd64:    ${{ steps.hash.outputs.hash-keadm-linux-amd64 }}
-      hash-keadm-linux-arm64:    ${{ steps.hash.outputs.hash-keadm-linux-arm64 }}
-      hash-keadm-linux-arm:      ${{ steps.hash.outputs.hash-keadm-linux-arm }}
-      hash-keadm-windows-amd64:  ${{ steps.hash.outputs.hash-keadm-windows-amd64 }}
-      hash-edgesite-linux-amd64: ${{ steps.hash.outputs.hash-edgesite-linux-amd64 }}
-      hash-edgesite-linux-arm64: ${{ steps.hash.outputs.hash-edgesite-linux-arm64 }}
-      hash-edgesite-linux-arm:   ${{ steps.hash.outputs.hash-edgesite-linux-arm }}
-    steps:
-      - name: checkout code
-        uses: actions/checkout@v4
-        with:
-          # fetch-depth:
-          # 0 indicates all history for all branches and tags.
-          # for `git describe --tags` in Makefile.
-          fetch-depth: 0
-      - name: Making and packaging
-        run: |
-          if [ "${{ matrix.os }}" == "linux" ]; then
-            docker pull kubeedge/build-tools:1.22.9-ke1
-            BUILD_CONTAINER=true
-          else
-            BUILD_CONTAINER=false
-          fi
-          make release WHAT=${{ matrix.target }} ARM_VERSION=${{ matrix.ARM_VERSION }} OS=${{ matrix.os }} BUILD_WITH_CONTAINER=$BUILD_CONTAINER
-      - name: Generate arch
-        run: |
-          if [ "${{ matrix.ARM_VERSION }}" = "GOARM7" ]; then echo "output_arch=arm" >> $GITHUB_ENV; elif [ ${{ matrix.ARM_VERSION }} = "GOARM8" ]; then echo "output_arch=arm64" >> $GITHUB_ENV; else echo "output_arch=amd64" >> $GITHUB_ENV; fi
-      - name: Generate hashes
-        shell: bash
-        id: hash
-        run: |
-          cp _output/release/${{ github.ref_name }}/${{ matrix.target }}-${{ github.ref_name }}-${{ matrix.os }}-${{ env.output_arch }}.tar.gz .
-          echo "hash-${{ matrix.target }}-${{ matrix.os }}-${{ env.output_arch }}=$( \
-                      sha256sum ${{ matrix.target }}-${{ github.ref_name }}-${{ matrix.os }}-${{ env.output_arch}}.tar.gz | base64 -w0 \
-                    )" >> "$GITHUB_OUTPUT"
-      - name: Uploading assets...
-        if: ${{ !env.ACT }}
-        uses: softprops/action-gh-release@v1
-        with:
-          files: |
-            _output/release/${{ github.ref_name }}/${{ matrix.target }}-${{ github.ref_name }}-${{ matrix.os }}-${{ env.output_arch }}.tar.gz
-            _output/release/${{ github.ref_name }}/checksum_${{ matrix.target }}-${{ github.ref_name }}-${{ matrix.os }}-${{ env.output_arch }}.tar.gz.txt
-
-  combine_hashes:
-    needs: [release-assests]
-    runs-on: ubuntu-22.04
-    outputs:
-      hashes: ${{ steps.hashes.outputs.hashes }}
-    env:
-      HASHES: ${{ toJSON(needs.release-assests.outputs) }}
-    steps:
-      - id: hashes
-        run: |
-          echo "$HASHES" | jq -r '.[] | @base64d' | sed "/^$/d" > hashes.txt
-          echo "hashes=$(cat hashes.txt | base64 -w0)" >> "$GITHUB_OUTPUT"
-
-  # This step calls the generic workflow to generate provenance.
-  provenance:
-    needs: [combine_hashes]
-    permissions:
-      actions: read
-      id-token: write
-      contents: write
-    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0
-    with:
-      base64-subjects: "${{ needs.combine_hashes.outputs.hashes }}"
-      # Upload provenance to a new release
-      upload-assets: true
-
   publish-image-to-dockerhub:
     name: publish to DockerHub
     strategy:
@@ -125,6 +36,16 @@ jobs:
           # 0 indicates all history for all branches and tags.
           # for `git describe --tags` in Makefile.
           fetch-depth: 0
+      - name: Free Disk Space
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: true
       - name: install QEMU
         uses: docker/setup-qemu-action@v1
       - name: install Buildx
@@ -132,8 +53,8 @@ jobs:
       - name: login to DockerHub
         uses: docker/login-action@v2
         with:
-          username: ${{ secrets.DOCKERHUB_USER_NAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          username: ${{ secrets.DOCKERHUB_USER_NAME_KUBEEDGE }}
+          password: ${{ secrets.DOCKERHUB_TOKEN_KUBEEDGE }}
       - name: generate dockerfile path
         run: |
           echo "dockerfile_path=$(./hack/make-rules/imageprocess.sh dockerfile ${{ matrix.target }})" >> $GITHUB_ENV
@@ -167,7 +88,7 @@ jobs:
     uses: slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@v2.1.0
     with:
       image: kubeedge/${{ matrix.target }}
-      registry-username: ${{ vars.DOCKERHUB_USER_NAME }}
+      registry-username: ${{ vars.DOCKERHUB_USER_NAME_KUBEEDGE }}
       digest: ${{ needs.publish-image-to-dockerhub.outputs[format('hash-digest-{0}', matrix.target)] }}
     secrets:
-      registry-password: ${{ secrets.DOCKERHUB_TOKEN }}
+      registry-password: ${{ secrets.DOCKERHUB_TOKEN_KUBEEDGE }}
