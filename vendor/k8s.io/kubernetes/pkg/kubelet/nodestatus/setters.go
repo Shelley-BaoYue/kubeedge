@@ -52,8 +52,6 @@ const (
 	MaxNamesPerImageInNodeStatus = 5
 )
 
-var KubeletVersion string
-
 // Setter modifies the node in-place, and returns an error if the modification failed.
 // Setters may partially mutate the node before returning an error.
 type Setter func(ctx context.Context, node *v1.Node) error
@@ -307,7 +305,7 @@ func VersionInfo(versionInfoFunc func() (*cadvisorapiv1.VersionInfo, error), // 
 		}
 		node.Status.NodeInfo.ContainerRuntimeVersion = fmt.Sprintf("%s://%s", runtimeTypeFunc(), runtimeVersion)
 
-		node.Status.NodeInfo.KubeletVersion = KubeletVersion
+		node.Status.NodeInfo.KubeletVersion = version.Get().String()
 
 		if utilfeature.DefaultFeatureGate.Enabled(features.DisableNodeKubeProxyVersion) {
 			// This field is deprecated and should be cleared if it was previously set.
