@@ -27,6 +27,8 @@ RUN cd /go/src/github.com/kubeedge/kubeedge && GOWORK=off go mod vendor
 
 RUN CGO_ENABLED=0 GO111MODULE=off ginkgo build -ldflags "-w -s -extldflags -static" -r /go/src/github.com/kubeedge/kubeedge/tests/e2e
 
+RUN CGO_ENABLED=0 GO111MODULE=off go test github.com/kubeedge/kubeedge/build/conformance/node-e2e-runner
+
 RUN CGO_ENABLED=0 GO111MODULE=off go build -v -o /usr/local/bin/node-e2e-runner -ldflags "$GO_LDFLAGS -w -s" \
    /go/src/github.com/kubeedge/kubeedge/build/conformance/node-e2e-runner
 

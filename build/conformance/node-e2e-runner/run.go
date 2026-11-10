@@ -53,6 +53,8 @@ const (
 	defaultReportPrefix = "conformance"
 	defaultGinkgoBinary = "/usr/local/bin/ginkgo"
 	defaultTestBinary   = "/usr/local/bin/e2e.test"
+	nodeShardEnvKey     = "NODE_CONFORMANCE_SHARD"
+	slowNodeFocus       = `\[sig-node\] Pods should (cap back-off at MaxContainerBackOff|have their auto-restart back-off timer reset on image update) \[Slow\] \[NodeConformance\]`
 )
 
 func main() {
@@ -120,6 +122,17 @@ func makeCmd(w io.Writer) (*exec.Cmd, error) {
 		return nil, err
 	}
 
+	focus, shardSkip, err := nodeConformanceFilters(
+		util.GetEnvWithDefault(focusEnvKey, defaultFocus),
+		util.GetEnvWithDefault(nodeShardEnvKey, "all"),
+	)
+	if err != nil {
+		return nil, err
+	}
+	if shardSkip != "" {
+		skipCommands = append(skipCommands, shardSkip)
+	}
+
 	skipped := strings.Join(skipCommands, "|")
 
 	ginkgoArgs = append(ginkgoArgs, "--skip="+skipped)
@@ -129,8 +142,7 @@ func makeCmd(w io.Writer) (*exec.Cmd, error) {
 		ginkgoArgs = append(ginkgoArgs, "--skip="+skipEnvValue)
 	}
 
-	focusEnvValue := util.GetEnvWithDefault(focusEnvKey, defaultFocus)
-	ginkgoArgs = append(ginkgoArgs, "--focus="+focusEnvValue)
+	ginkgoArgs = append(ginkgoArgs, "--focus="+focus)
 	ginkgoArgs = append(ginkgoArgs, "--no-color=true")
 
 	timeoutEnvValue := util.GetEnvWithDefault(ginkgoTimeoutEnvKey, defaultTimeout)
@@ -152,6 +164,11 @@ func makeCmd(w io.Writer) (*exec.Cmd, error) {
 		"--test-with-device=" + util.GetEnvWithDefault(testWithDevice, "false"),
 	}
 
+	if util.GetEnvWithDefault(nodeShardEnvKey, "all") != "all" {
+		// Pass this to the test binary; the older Ginkgo CLI does not expose it.
+		extraArgs = append(extraArgs, "--ginkgo.fail-on-empty=true")
+	}
+
 	if len(util.GetEnvWithDefault(extraArgsEnvKey, "")) > 0 {
 		extraArgs = append(extraArgs, strings.Split(util.GetEnvWithDefault(extraArgsEnvKey, ""), ",")...)
 	}
@@ -166,4 +183,21 @@ func makeCmd(w io.Writer) (*exec.Cmd, error) {
 	cmd.Stdout = w
 	cmd.Stderr = w
 	return cmd, nil
+}
+
+func nodeConformanceFilters(focus, shard string) (string, string, error) {
+	if shard == "all" {
+		return focus, "", nil
+	}
+	if focus != defaultFocus {
+		return "", "", fmt.Errorf("%s cannot be combined with a custom %s", nodeShardEnvKey, focusEnvKey)
+	}
+	switch shard {
+	case "fast":
+		return focus, slowNodeFocus, nil
+	case "slow":
+		return slowNodeFocus, "", nil
+	default:
+		return "", "", fmt.Errorf("invalid %s %q: expected all, fast or slow", nodeShardEnvKey, shard)
+	}
 }

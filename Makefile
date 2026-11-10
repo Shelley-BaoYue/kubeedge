@@ -473,7 +473,12 @@ define CONFORMANCE_E2E_HELP_INFO
 #
 # Example:
 #   make conformance_e2e
+#   make conformance_e2e KIND_IMAGE=kindest/node:v1.32.2 CONFORMANCE_TYPE=nodeconformance NODE_CONFORMANCE_SHARD=fast
+#   make conformance_e2e KIND_IMAGE=kindest/node:v1.32.2 CONFORMANCE_TYPE=nodeconformance NODE_CONFORMANCE_SHARD=slow
 #   make conformance_e2e HELP=y
+#
+# NODE_CONFORMANCE_SHARD defaults to all; fast and slow together retain the full node suite.
+# CONFORMANCE_IMAGE optionally reuses a locally loaded test image instead of building one.
 #
 endef
 .PHONY: conformance_e2e

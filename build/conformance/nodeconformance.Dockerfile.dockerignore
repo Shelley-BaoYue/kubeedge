@@ -1,0 +1,4 @@
+.git
+_output
+modbus
+staging/src/github.com/kubeedge/modbus

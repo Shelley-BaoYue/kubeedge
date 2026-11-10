@@ -25,6 +25,23 @@ KIND_IMAGE=${1:-"kindest/node:v1.31.2"}
 CONFORMANCE_TYPE=${2:-"nodeconformance"}
 VERSION=$(git rev-parse --short=12 HEAD)
 
+case $CONFORMANCE_TYPE in
+  "nodeconformance")
+    dockerfile="${KUBEEDGE_ROOT}/build/conformance/nodeconformance.Dockerfile"
+    ;;
+  "conformance")
+    dockerfile="${KUBEEDGE_ROOT}/build/conformance/Dockerfile"
+    ;;
+  *)
+    echo "Invalid conformance type: $CONFORMANCE_TYPE"
+    exit 1
+    ;;
+esac
+
+if [[ -n "${CONFORMANCE_IMAGE:-}" ]]; then
+  docker image inspect "${CONFORMANCE_IMAGE}" >/dev/null
+fi
+
 function cleanup() {
   bash ${KUBEEDGE_ROOT}/tests/scripts/cleanup.sh
 }
@@ -45,13 +62,14 @@ ENABLE_DAEMON=true bash -x ${KUBEEDGE_ROOT}/hack/local-up-kubeedge.sh ${KIND_IMA
   exit 1
 }
 
-# Build test mapper project and docker image
-bash -x ${KUBEEDGE_ROOT}/tests/scripts/generate_mapper.sh || {
-  echo "failed to build mapper image !!!"
-  exit 1
-}
-
 trap cleanup EXIT
+
+if [[ "${CONFORMANCE_TYPE}" == "conformance" ]]; then
+  bash -x ${KUBEEDGE_ROOT}/tests/scripts/generate_mapper.sh || {
+    echo "failed to build mapper image !!!"
+    exit 1
+  }
+fi
 
 sleep 10
 
@@ -80,6 +98,7 @@ function run_conformance_test() {
   docker run --rm \
   --env E2E_SKIP="\[Serial\]" \
   --env E2E_PARALLEL="-p" \
+  --env NODE_CONFORMANCE_SHARD="${NODE_CONFORMANCE_SHARD:-all}" \
   --env CHECK_EDGECORE_ENVIRONMENT="false" \
   --env ACK_GINKGO_RC="true" \
   --env KUBECONFIG=/root/.kube/config \
@@ -90,23 +109,10 @@ function run_conformance_test() {
   --network host $image
 }
 
-case $CONFORMANCE_TYPE in
-  "nodeconformance")
-    echo "Running nodeconformance test"
-    image="kubeedge/nodeconformance-test:${VERSION}"
-    docker build -t "$image" -f ${KUBEEDGE_ROOT}/build/conformance/nodeconformance.Dockerfile .
+echo "Running ${CONFORMANCE_TYPE} test"
+image="${CONFORMANCE_IMAGE:-kubeedge/${CONFORMANCE_TYPE}-test:${VERSION}}"
+if [[ -z "${CONFORMANCE_IMAGE:-}" ]]; then
+  docker build -t "$image" -f "$dockerfile" .
+fi
 
-    run_conformance_test "$image" || { echo "Node conformance test failed with exit code $?"; exit 1; }
-    ;;
-  "conformance")
-    echo "Running conformance test"
-    image="kubeedge/conformance-test:${VERSION}"
-    docker build -t "$image" -f ${KUBEEDGE_ROOT}/build/conformance/Dockerfile .
-
-    run_conformance_test "$image" || { echo "Conformance test failed with exit code $?"; exit 1; }
-    ;;
-  *)
-    echo "Invalid conformance type: $CONFORMANCE_TYPE"
-    exit 1
-    ;;
-esac
+run_conformance_test "$image" || { echo "${CONFORMANCE_TYPE} test failed with exit code $?"; exit 1; }
