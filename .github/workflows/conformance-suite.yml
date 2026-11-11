@@ -1,0 +1,108 @@
+name: Conformance suite
+
+on:
+  workflow_call:
+    inputs:
+      suite:
+        required: true
+        type: string
+      shard:
+        required: true
+        type: string
+      result-name:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Run suite
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    env:
+      GO111MODULE: on
+      CONTAINER_RUN_OPTIONS: " "
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate suite
+        env:
+          SUITE: ${{ inputs.suite }}
+          SHARD: ${{ inputs.shard }}
+        run: |
+          case "${SUITE}:${SHARD}" in
+            conformance:all|nodeconformance:all|nodeconformance:fast|nodeconformance:slow) ;;
+            *) echo "::error::Invalid conformance suite or shard"; exit 1 ;;
+          esac
+
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.14'
+          cache-dependency-path: |
+            go.sum
+            staging/**/go.sum
+
+      - name: Install dependencies
+        run: |
+          go install sigs.k8s.io/kind@v0.27.0
+          curl -LO https://dl.k8s.io/release/v1.32.10/bin/linux/amd64/kubectl && sudo install kubectl /usr/local/bin/kubectl
+
+      - name: Free Disk Space
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: false
+          docker-images: true
+          swap-storage: true
+
+      - name: Restore component build cache
+        uses: actions/cache@v4
+        with:
+          path: _output/local/_go/cache
+          key: ${{ runner.os }}-conformance-components-${{ hashFiles('go.mod', 'go.sum', 'go.work', 'go.work.sum', 'staging/**/go.mod', 'staging/**/go.sum', 'hack/make-rules/build_with_container.sh') }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-conformance-components-${{ hashFiles('go.mod', 'go.sum', 'go.work', 'go.work.sum', 'staging/**/go.mod', 'staging/**/go.sum', 'hack/make-rules/build_with_container.sh') }}-
+
+      - name: Pull build-tools image
+        run: docker pull kubeedge/build-tools:1.25.14-ke1
+
+      - name: Enable cri config in containerd service
+        run: |
+          containerd config default | sudo tee /etc/containerd/config.toml && sudo systemctl restart containerd.service
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build conformance test image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: build/conformance/${{ inputs.suite == 'conformance' && 'Dockerfile' || 'nodeconformance.Dockerfile' }}
+          load: true
+          tags: kubeedge/${{ inputs.suite }}-test:${{ github.sha }}
+          cache-from: type=gha,scope=${{ inputs.suite }}
+          cache-to: type=gha,mode=max,scope=${{ inputs.suite }}
+
+      - name: Run conformance e2e
+        env:
+          KIND_IMAGE: kindest/node:v1.32.2
+          CONFORMANCE_TYPE: ${{ inputs.suite }}
+          NODE_CONFORMANCE_SHARD: ${{ inputs.shard }}
+          CONFORMANCE_IMAGE: kubeedge/${{ inputs.suite }}-test:${{ github.sha }}
+        run: make conformance_e2e
+
+      - name: Upload conformance e2e test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ${{ inputs.result-name }}
+          path: /tmp/results/

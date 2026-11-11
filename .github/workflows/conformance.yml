@@ -1,0 +1,83 @@
+name: Conformance CI
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+  push:
+    branches: [master]
+  schedule:
+    # Daily at 02:23 UTC (10:23 UTC+8), independently of weekly compatibility CI.
+    - cron: '23 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: conformance-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  policy:
+    name: Select conformance coverage
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    outputs:
+      run-slow: ${{ steps.select.outputs.run-slow }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Test coverage policy
+        run: node --test .github/scripts/conformance-policy.test.cjs
+
+      - name: Select coverage
+        id: select
+        run: node .github/scripts/conformance-policy.cjs select
+
+  fast:
+    name: ${{ matrix.cases.suite }}
+    needs: policy
+    strategy:
+      fail-fast: false
+      matrix:
+        cases:
+          - suite: conformance
+            shard: all
+            result-name: conformance-test-results
+          - suite: nodeconformance
+            shard: fast
+            result-name: nodeconformance-test-results
+    uses: ./.github/workflows/conformance-suite.yml
+    with:
+      suite: ${{ matrix.cases.suite }}
+      shard: ${{ matrix.cases.shard }}
+      result-name: ${{ matrix.cases.result-name }}
+
+  slow:
+    name: nodeconformance slow
+    needs: policy
+    if: needs.policy.outputs.run-slow == 'true'
+    uses: ./.github/workflows/conformance-suite.yml
+    with:
+      suite: nodeconformance
+      shard: slow
+      result-name: nodeconformance-slow-test-results
+
+  required:
+    name: Conformance required
+    if: ${{ always() }}
+    needs: [policy, fast, slow]
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify required coverage
+        env:
+          POLICY_RESULT: ${{ needs.policy.result }}
+          FAST_RESULT: ${{ needs.fast.result }}
+          SLOW_RESULT: ${{ needs.slow.result }}
+          RUN_SLOW: ${{ needs.policy.outputs.run-slow }}
+        run: node .github/scripts/conformance-policy.cjs check
